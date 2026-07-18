@@ -217,8 +217,10 @@ Opciones:
 
 1. Abrir la URL de Render.
 2. Introducir la contraseña (`BI_PASSWORD`).
-3. Si no hay parquet: generarlos en local y desplegarlos, o (con más RAM / `BI_ALLOW_HEAVY_PIPELINE`) cargar Excel → **Procesar cruce**.
-4. Validar mapa y las dos pestañas de análisis.
+3. El tablero **ya muestra el cruce precargado** (parquet en `data/processed/`).
+4. Para sustituirlo: expander **Actualizar datos** → subir Excel → **Sustituir cruce**.
+
+Los Excel crudos no van en Git. Solo el resultado procesado (sin columnas de texto libre sensibles como observaciones).
 
 ### 7.6 Comando equivalente local al contenedor
 
@@ -234,14 +236,15 @@ docker run -p 10000:10000 -e BI_PASSWORD=demo -e BI_LOW_MEMORY=0 bi-habitable
 Los Excel 1×10 pueden incluir **cédula y teléfono**. Por eso:
 
 - Autenticación obligatoria en producción.
-- No versionar archivos fuente.
+- No versionar archivos Excel fuente.
+- El seed en Git es el **resultado del cruce** (direcciones/coords), no los Excel crudos.
 - En el futuro: anonimizar columnas sensibles o migrar a un backend con roles (p. ej. módulo en el Django CPEH).
 
 ---
 
 ## 9. Roadmap sugerido (sin implementar aún)
 
-1. Disco persistente en Render + backup de parquet.
+1. Disco persistente en Render + backup de parquet (las cargas UI se pierden al redeploy sin disco).
 2. Auth por usuario (no solo contraseña compartida).
 3. Export CSV de pendientes para cuadrillas.
 4. Si surge gestión de casos (estados, asignación): extender el **Django de la Comisión**, no un segundo Django paralelo; el BI pasaría a leer BD.

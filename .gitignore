@@ -7,14 +7,15 @@ __pycache__/
 venv/
 env/
 
-# Datos sensibles / generados (no subir Excel ni parquet con PII)
+# Excel crudos y cargas temporales (PII) — no versionar
 data/uploads/*
 !data/uploads/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
 *.xlsx
 *.xls
-*.parquet
+
+# Parquet generados fuera del seed (por si aparecen en otras rutas)
+# El seed de producción SÍ se versiona en data/processed/
+data/uploads/**/*.parquet
 
 # Streamlit / secretos
 .streamlit/secrets.toml

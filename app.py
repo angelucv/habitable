@@ -40,7 +40,7 @@ sys.path.insert(0, str(ROOT / "src"))
 DATA = ROOT / "data" / "processed"
 
 from charts_echarts import bar_vertical  # noqa: E402
-from data_ingest import render_upload_panel  # noqa: E402
+from data_ingest import data_origin_caption, render_upload_panel  # noqa: E402
 from map_robust import render_map_ui  # noqa: E402
 from pages_analysis import page_1x10, page_habitable  # noqa: E402
 from runtime_limits import is_low_memory  # noqa: E402
@@ -337,8 +337,8 @@ def main():
 
     if not ensure_data_ready():
         st.warning(
-            "Aún no hay datos procesados. Carga los Excel abajo y pulsa "
-            "**Procesar cruce**."
+            "Aún no hay datos procesados. Abre «Actualizar datos» abajo, "
+            "carga los Excel y pulsa **Sustituir cruce**."
         )
 
     render_hero(
@@ -353,8 +353,11 @@ def main():
             "Servicio en modo bajo consumo de memoria · mapa con tope de marcadores."
         )
 
-    # Carga de Excel y regeneración del matching (actualiza las 3 pestañas)
-    with st.expander("Cargar / actualizar archivos fuente", expanded=not ensure_data_ready()):
+    # Precarga lista → panel colapsado; sin datos → abierto para cargar
+    with st.expander(
+        "Actualizar datos (sustituye la precarga)",
+        expanded=not ensure_data_ready(),
+    ):
         render_upload_panel()
 
     if not ensure_data_ready():
@@ -364,6 +367,9 @@ def main():
     gc.collect()
 
     with st.sidebar:
+        origen = data_origin_caption()
+        if origen:
+            st.caption(origen)
         st.markdown("### Panorama nacional")
         st.markdown(
             f"""

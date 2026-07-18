@@ -13,10 +13,10 @@ services:
         sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
-      # Evita OOM en plan free (~512 MB): mapa con tope + sin pipeline Excel
+      # Más RAM en Render: precarga completa + reemplazo por Excel
       - key: BI_LOW_MEMORY
-        value: "1"
+        value: "0"
       - key: BI_MAP_MAX_MARKERS
-        value: "900"
+        value: "5000"
       - key: MALLOC_ARENA_MAX
         value: "2"

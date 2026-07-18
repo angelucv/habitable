@@ -1,0 +1,31 @@
+{
+  "radius_m": 50.0,
+  "n_1x10": 33251,
+  "n_1x10_mapeable": 30824,
+  "n_hab": 9865,
+  "n_hab_alta": 9471,
+  "n_hab_hotspot": 368,
+  "cats": {
+    "solo_1x10": 28319,
+    "coincide_alta": 1190,
+    "coincide_geo_solo": 671,
+    "coincide_media": 644
+  },
+  "coincide_auto": 1834,
+  "solo_1x10": 28319,
+  "dudosos": 671,
+  "pct_ya_insp": 5.9,
+  "pct_pendiente": 91.9,
+  "n_1x10_mapa_ok": 27467,
+  "n_1x10_mapa_malo": 3357,
+  "n_hab_mapa_ok": 7174,
+  "uniq_ya_atendidas": 892,
+  "uniq_pendientes": 21498,
+  "uniq_dudosos": 265,
+  "solicitudes_mapeables": 30824,
+  "ubicaciones_unicas": 22655,
+  "ubicaciones_con_multiples_reportes": 3534,
+  "reportes_en_grupos_multi": 11703,
+  "max_reportes_misma_ubicacion": 93,
+  "dedupe_radius_m": 20.0
+}

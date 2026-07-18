@@ -8,13 +8,17 @@ Permite a cualquier colaborador autenticado:
 3. Ejecutar el pipeline (``prepare_data.run_pipeline``).
 4. Invalidar caché del BI para que las tres pestañas muestren datos nuevos.
 
-Los archivos se guardan en ``data/uploads/`` (no se versionan en Git).
+Por defecto el servicio arranca con un **cruce precargado** en
+``data/processed/``. Una carga nueva **sustituye** ese resultado.
+
+Los Excel se guardan en ``data/uploads/`` (no se versionan en Git).
 """
 
 from __future__ import annotations
 
 import gc
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import streamlit as st
@@ -25,7 +29,9 @@ from ui_theme import render_section
 
 ROOT = Path(__file__).resolve().parents[1]
 UPLOAD_DIR = ROOT / "data" / "uploads"
+PROCESSED = ROOT / "data" / "processed"
 META_PATH = UPLOAD_DIR / "last_upload.json"
+SEED_META = PROCESSED / "seed_meta.json"
 
 
 def _ensure_upload_dir() -> None:
@@ -38,13 +44,54 @@ def _save_upload(uploaded, dest: Path) -> Path:
     return dest
 
 
+def data_origin_caption() -> str | None:
+    """Texto corto sobre el origen del cruce actual (sidebar / panel)."""
+    if META_PATH.exists():
+        try:
+            ts = META_PATH.read_text(encoding="utf-8").strip()
+            return f"Datos actualizados por carga · {ts}"
+        except Exception:  # noqa: BLE001
+            return "Datos actualizados por carga en la UI"
+    if SEED_META.exists():
+        try:
+            meta = json.loads(SEED_META.read_text(encoding="utf-8"))
+            gen = meta.get("generado_en", "")
+            return f"Precarga del despliegue · {gen}"
+        except Exception:  # noqa: BLE001
+            return "Precarga del despliegue"
+    if (PROCESSED / "summary.json").exists():
+        return "Cruce procesado disponible"
+    return None
+
+
 def render_upload_panel() -> None:
-    """Sección ejecutiva: cargar Excel 1×10 y Habitable → regenerar cruce."""
+    """Cargar Excel nuevos: al procesar, sustituyen el cruce precargado."""
+    ready = (PROCESSED / "solicitudes.parquet").exists() and (
+        PROCESSED / "inspecciones.parquet"
+    ).exists()
+
     render_section(
-        "Cargar datos y actualizar cruce",
-        "Sube los Excel de solicitudes 1×10 e inspecciones Habitable. "
-        "Al procesar se regeneran el mapa y los dos análisis.",
+        "Actualizar datos (opcional)",
+        "El tablero ya trae un cruce precargado. Si subes Excel nuevos y "
+        "procesas, **sustituyen** el resultado actual en mapa y análisis.",
     )
+
+    origin = data_origin_caption()
+    if origin:
+        st.caption(origin)
+    if ready:
+        try:
+            summary = json.loads(
+                (PROCESSED / "summary.json").read_text(encoding="utf-8")
+            )
+            st.info(
+                f"En uso ahora → 1×10: {summary.get('n_1x10', 0):,} · "
+                f"Habitable: {summary.get('n_hab', 0):,} · "
+                f"Ya atendidas: {summary.get('coincide_auto', 0):,} · "
+                f"Pendientes: {summary.get('solo_1x10', 0):,}".replace(",", ".")
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     _ensure_upload_dir()
     path_1x10 = UPLOAD_DIR / "solicitudes_1x10.xlsx"
@@ -60,7 +107,7 @@ def render_upload_panel() -> None:
             label_visibility="collapsed",
         )
         if path_1x10.exists() and not f1:
-            st.caption(f"En uso: {path_1x10.name}")
+            st.caption(f"Guardado previo: {path_1x10.name}")
     with c2:
         st.markdown("**Archivo Habitable** (inspecciones)")
         f2 = st.file_uploader(
@@ -75,26 +122,24 @@ def render_upload_panel() -> None:
             help="Nombre de la hoja (por defecto Inspecciones).",
         )
         if path_hab.exists() and not f2:
-            st.caption(f"En uso: {path_hab.name}")
+            st.caption(f"Guardado previo: {path_hab.name}")
 
     if is_low_memory() and not allow_heavy_pipeline():
         st.warning(
-            "En este servicio (poca RAM) regenerar el cruce desde Excel suele "
-            "provocar reinicio por memoria. Procesa en local (`python -m prepare_data`) "
-            "y despliega los parquet, o define `BI_ALLOW_HEAVY_PIPELINE=1` "
-            "y sube de plan en Render (p. ej. 1 GB+)."
+            "En modo bajo consumo el procesamiento desde Excel está bloqueado. "
+            "Define `BI_ALLOW_HEAVY_PIPELINE=1` o desactiva `BI_LOW_MEMORY`."
         )
 
     b1, b2 = st.columns([2, 1])
     with b1:
         run = st.button(
-            "Procesar cruce y actualizar pestañas",
+            "Sustituir cruce con estos archivos",
             type="primary",
             use_container_width=True,
             disabled=is_low_memory() and not allow_heavy_pipeline(),
         )
     with b2:
-        st.caption("Puede tardar 1–2 minutos con archivos grandes.")
+        st.caption("Reemplaza la precarga · 1–2 min.")
 
     if run:
         if is_low_memory() and not allow_heavy_pipeline():
@@ -109,7 +154,7 @@ def render_upload_panel() -> None:
         if not path_1x10.exists() or not path_hab.exists():
             st.error(
                 "Se necesitan ambos archivos. Carga 1×10 y Habitable "
-                "(o deja los ya guardados en una carga previa)."
+                "(o deja los ya guardados de una carga previa)."
             )
             return
 
@@ -127,12 +172,27 @@ def render_upload_panel() -> None:
             finally:
                 gc.collect()
 
-        META_PATH.write_text(
-            datetime.now().isoformat(timespec="seconds"),
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        META_PATH.write_text(now, encoding="utf-8")
+        # Marca que ya no es la precarga del despliegue
+        SEED_META.write_text(
+            json.dumps(
+                {
+                    "origen": "carga_ui",
+                    "generado_en": now,
+                    "nota": "Sustituyó la precarga del despliegue.",
+                    "n_1x10": summary.get("n_1x10"),
+                    "n_hab": summary.get("n_hab"),
+                    "coincide_auto": summary.get("coincide_auto"),
+                    "solo_1x10": summary.get("solo_1x10"),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
             encoding="utf-8",
         )
         st.success(
-            f"Cruce actualizado · 1×10: {summary.get('n_1x10', 0):,} · "
+            f"Cruce sustituido · 1×10: {summary.get('n_1x10', 0):,} · "
             f"Habitable: {summary.get('n_hab', 0):,} · "
             f"Ya atendidas: {summary.get('coincide_auto', 0):,}".replace(",", ".")
         )
