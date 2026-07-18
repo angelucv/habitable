@@ -77,9 +77,9 @@ def enrich_habitable_cruce(df: pd.DataFrame) -> pd.DataFrame:
             lambda c: ESTATUS_CONTACTO.get(c, c)
         )
         out["en_cola_pendiente"] = cat.isin(["solo_1x10", "no_mapeable"])
-        out["atendido_segun_cruce"] = cat.isin(list(CRUZADO_SI))
+        out["atendido_segun_cruce"] = cat.isin(CRUZADO_SI)
         out["requiere_revision_antes_de_informar"] = cat.isin(
-            list(CRUZADO_REVISAR) | {"no_mapeable"}
+            CRUZADO_REVISAR | {"no_mapeable"}
         )
     else:
         out["cruzado_con_habitable"] = "No"
