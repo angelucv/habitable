@@ -40,7 +40,12 @@ from habitable_reports import (
 )
 
 
-from depuracion_1x10 import excel_bytes_depurado, resumen_depuracion
+from depuracion_1x10 import (
+    ESTATUS_CRUCE,
+    apply_export_filters,
+    excel_bytes_depurado,
+    resumen_depuracion,
+)
 
 
 def fmt_num(n: float | int) -> str:
@@ -73,7 +78,8 @@ def _seccion_depuracion_1x10(sol: pd.DataFrame, summary: dict) -> None:
    ubicación representativa (`n_reportes`, `es_representante`).
 
 El archivo descargable conserva el **dato original** (cuando está disponible) y
-añade columnas depuradas (`*_n`, flags geo, cruce, unificación).
+añade columnas depuradas, **si cruzó con Habitable**, el **estatus de la
+inspección** (verde/amarillo/rojo/negro) y flags de revisión.
             """.strip()
         )
 
@@ -85,10 +91,10 @@ añade columnas depuradas (`*_n`, flags geo, cruce, unificación).
                 "tone": "info",
             },
             {
-                "label": "Mapeables",
-                "value": fmt_num(r["n_mapeable"]),
+                "label": "Cruzados Habitable",
+                "value": fmt_num(r["n_cruzados_habitable"]),
                 "tone": "success",
-                "hint": f"{100 * r['n_mapeable'] / max(r['n_total'], 1):.1f}%",
+                "hint": "Alta + media",
             },
             {
                 "label": "Sin mapear",
@@ -116,8 +122,8 @@ añade columnas depuradas (`*_n`, flags geo, cruce, unificación).
     with c1:
         st.markdown(
             f"""
-- **Ya cruzadas con Habitable (alta+media):** {fmt_num(r['n_ya_atendidas'])}
-- **Pendientes de atender (sin match útil):** {fmt_num(r['n_pendientes_atender'])}
+- **Cruzadas con Habitable (alta+media):** {fmt_num(r['n_ya_atendidas'])}
+- **No cruzadas — pendientes de atender:** {fmt_num(r['n_pendientes_atender'])}
 - **Ubicaciones unificadas:** {fmt_num(r.get('ubicaciones_unicas') or 0)}
 - **Sitios con varios reportes:** {fmt_num(r.get('ubicaciones_con_multiples_reportes') or 0)}
             """.strip()
@@ -131,6 +137,16 @@ añade columnas depuradas (`*_n`, flags geo, cruce, unificación).
 - **Total pendiente de revisión:** {fmt_num(r['n_pendiente_revision'])}
             """.strip()
         )
+
+    if r.get("hab_etiqueta_cruzados"):
+        with st.expander("Estatus Habitable en casos cruzados", expanded=False):
+            rows = [
+                {"estatus": k, "n": v}
+                for k, v in sorted(
+                    r["hab_etiqueta_cruzados"].items(), key=lambda x: -x[1]
+                )
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     if r["calidad_geo"]:
         with st.expander("Detalle por calidad geográfica", expanded=False):
@@ -147,21 +163,132 @@ añade columnas depuradas (`*_n`, flags geo, cruce, unificación).
                 )
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
+    st.markdown("#### Descargar Excel depurado (con filtros)")
+    st.caption(
+        "Filtra por territorio, estatus de cruce Habitable o semáforo de "
+        "inspección. El archivo incluye columnas `cruzado_con_habitable`, "
+        "`estatus_cruce` y `estatus_inspeccion_habitable`."
+    )
+
+    estados_all = sorted(sol["estado_n"].dropna().unique().tolist()) if "estado_n" in sol.columns else []
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        filt_est = st.multiselect(
+            "Estado",
+            options=estados_all,
+            default=[],
+            key="dep_est",
+            help="Vacío = todos los estados.",
+        )
+    sol_mun = sol
+    if filt_est and "estado_n" in sol.columns:
+        sol_mun = sol[sol["estado_n"].isin(filt_est)]
+    munis_all = (
+        sorted(sol_mun["municipio_n"].dropna().unique().tolist())
+        if "municipio_n" in sol_mun.columns
+        else []
+    )
+    with f2:
+        filt_mun = st.multiselect(
+            "Municipio",
+            options=munis_all,
+            default=[],
+            key="dep_mun",
+        )
+    sol_par = sol_mun
+    if filt_mun and "municipio_n" in sol_par.columns:
+        sol_par = sol_par[sol_par["municipio_n"].isin(filt_mun)]
+    parrs_all = (
+        sorted(sol_par["parroquia_n"].replace("", pd.NA).dropna().unique().tolist())
+        if "parroquia_n" in sol_par.columns
+        else []
+    )
+    with f3:
+        filt_parr = st.multiselect(
+            "Parroquia",
+            options=parrs_all,
+            default=[],
+            key="dep_parr",
+        )
+
+    g1, g2, g3 = st.columns(3)
+    with g1:
+        filt_cruce = st.multiselect(
+            "Estatus de cruce Habitable",
+            options=list(ESTATUS_CRUCE.values()),
+            default=[],
+            key="dep_cruce",
+            help="Cruzado / no cruzado / por revisar.",
+        )
+    with g2:
+        eti_opts = ["VERDE", "AMARILLO", "ROJO", "NEGRO", "(sin etiqueta)"]
+        filt_eti = st.multiselect(
+            "Estatus inspección Habitable",
+            options=eti_opts,
+            default=[],
+            key="dep_eti",
+        )
+    with g3:
+        cal_opts = (
+            sorted(sol["calidad_geo"].dropna().unique().tolist())
+            if "calidad_geo" in sol.columns
+            else []
+        )
+        filt_cal = st.multiselect(
+            "Calidad GPS",
+            options=cal_opts,
+            default=[],
+            key="dep_cal",
+        )
+
+    t1, t2 = st.columns(2)
+    with t1:
+        solo_rep = st.checkbox(
+            "Solo ubicaciones unificadas (representantes)",
+            value=False,
+            key="dep_rep",
+        )
+    with t2:
+        solo_rev = st.checkbox(
+            "Solo pendientes de revisión (GPS o cruce)",
+            value=False,
+            key="dep_rev",
+        )
+
+    filtrado = apply_export_filters(
+        sol,
+        estados=filt_est or None,
+        municipios=filt_mun or None,
+        parroquias=filt_parr or None,
+        estatus_cruce=filt_cruce or None,
+        etiquetas_hab=filt_eti or None,
+        calidad_geo=filt_cal or None,
+        solo_representantes=solo_rep,
+        solo_requiere_revision=solo_rev,
+    )
+    st.info(
+        f"Filas a descargar: **{fmt_num(len(filtrado))}** "
+        f"(de {fmt_num(len(sol))} en el universo completo)."
+    )
+
     try:
-        xlsx = excel_bytes_depurado(sol)
-        st.download_button(
-            "Descargar 1×10 depurado (Excel)",
-            data=xlsx,
-            file_name="solicitudes_1x10_depurado.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary",
-            use_container_width=True,
-            help="Incluye columnas originales + depuradas y una hoja de resumen.",
-        )
-        st.caption(
-            "El Excel trae la hoja `1x10_depurado` (dato + flags) y "
-            "`resumen_depuracion` / `calidad_geo` para seguimiento."
-        )
+        if filtrado.empty:
+            st.warning("Sin filas con los filtros actuales. Amplía la selección.")
+        else:
+            xlsx = excel_bytes_depurado(filtrado)
+            st.download_button(
+                "Descargar 1×10 depurado (Excel)",
+                data=xlsx,
+                file_name="solicitudes_1x10_depurado.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True,
+                help="Original + depuradas + cruce Habitable + estatus de inspección.",
+            )
+            st.caption(
+                "Hojas: `1x10_depurado` · `resumen_depuracion` · `calidad_geo` · "
+                "`cruce_habitable` · `estatus_habitable`."
+            )
     except Exception as exc:  # noqa: BLE001
         st.warning(f"No se pudo generar el Excel depurado: {exc}")
 
