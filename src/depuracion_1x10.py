@@ -190,55 +190,6 @@ def resumen_depuracion(sol: pd.DataFrame, summary: dict | None = None) -> dict:
     }
 
 
-def enrich_habitable_cruce(df: pd.DataFrame) -> pd.DataFrame:
-    """Añade columnas explícitas de cruce Habitable y estatus de inspección."""
-    out = df.copy()
-    if "match_cat" in out.columns:
-        cat = out["match_cat"].astype(str)
-        out["cruzado_con_habitable"] = cat.map(
-            lambda c: "Sí"
-            if c in CRUZADO_SI
-            else ("Por revisar" if c in CRUZADO_REVISAR else "No")
-        )
-        out["estatus_cruce"] = cat.map(
-            lambda c: ESTATUS_CRUCE.get(c, c)
-        )
-        out["match_cat_desc"] = cat.map(
-            lambda c: MATCH_CAT_DESC.get(c, c)
-        )
-    else:
-        out["cruzado_con_habitable"] = "No"
-        out["estatus_cruce"] = "Sin dato de cruce"
-        out["match_cat_desc"] = ""
-
-    if "hab_etiqueta" in out.columns:
-        eti = (
-            out["hab_etiqueta"]
-            .fillna("")
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-        out["estatus_inspeccion_habitable"] = eti
-        out["estatus_inspeccion_habitable_desc"] = eti.map(
-            lambda e: HAB_ETIQUETA_DESC.get(e, f"Habitable — {e}" if e else HAB_ETIQUETA_DESC[""])
-        )
-        # Solo tiene sentido si hay cruce; si no, dejar vacío explícito
-        if "match_cat" in out.columns:
-            sin = ~out["match_cat"].isin(CRUZADO_SI | CRUZADO_REVISAR)
-            out.loc[sin, "estatus_inspeccion_habitable"] = ""
-            out.loc[sin, "estatus_inspeccion_habitable_desc"] = (
-                "Sin inspección Habitable vinculada"
-            )
-    else:
-        out["estatus_inspeccion_habitable"] = ""
-        out["estatus_inspeccion_habitable_desc"] = "Sin dato Habitable"
-
-    if "hab_nombre" in out.columns:
-        out["edificacion_habitable"] = out["hab_nombre"].fillna("").astype(str)
-    return out
-
-
 def apply_export_filters(
     sol: pd.DataFrame,
     *,
