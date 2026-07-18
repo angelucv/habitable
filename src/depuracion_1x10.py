@@ -60,6 +60,65 @@ HAB_ETIQUETA_DESC = {
     "": "Sin inspección Habitable vinculada",
 }
 
+# Leyenda de hojas del Excel operativo (UI + pestaña del archivo)
+HOJAS_EXCEL_LEYENDA = [
+    {
+        "hoja": "1x10_depurado",
+        "contenido": (
+            "Universo completo del filtro: una fila por código de caso "
+            "(pendientes, cruzados y dudosos), con datos del denunciante y cruce."
+        ),
+        "uso": "Archivo maestro; filtrar a mano si hace falta.",
+    },
+    {
+        "hoja": "cola_pendiente_casos",
+        "contenido": (
+            "Casos del 1×10 sin cruce útil con Habitable "
+            "(aún no atendidos según el matching)."
+        ),
+        "uso": "Cola para contactar / pedir revisión a Habitable.",
+    },
+    {
+        "hoja": "casos_atendidos_informar",
+        "contenido": (
+            "Casos del 1×10 ya cruzados con Habitable "
+            "(coincidencia alta o media)."
+        ),
+        "uso": "Informar al ciudadano que ya hay inspección vinculada.",
+    },
+    {
+        "hoja": "cruce_habitable",
+        "contenido": "Conteo por estatus de cruce (cruzado, pendiente, por revisar).",
+        "uso": "Resumen numérico del matching.",
+    },
+    {
+        "hoja": "estatus_habitable",
+        "contenido": "Conteo de semáforo Habitable (verde/amarillo/rojo/negro) en cruzados.",
+        "uso": "Ver resultado de inspección cuando ya hay cruce.",
+    },
+    {
+        "hoja": "calidad_geo",
+        "contenido": "Conteo por calidad del GPS (válido, dudoso, sin coords, etc.).",
+        "uso": "Diagnóstico de ubicaciones.",
+    },
+    {
+        "hoja": "resumen_depuracion",
+        "contenido": "Totales generales del archivo descargado.",
+        "uso": "Vista rápida de volumen y pendientes.",
+    },
+]
+
+
+def texto_leyenda_hojas_excel() -> str:
+    """Texto breve para UI / WhatsApp sobre las pestañas del Excel."""
+    lineas = [
+        "El Excel trae varias pestañas. Qué contiene cada una:",
+        "",
+    ]
+    for h in HOJAS_EXCEL_LEYENDA:
+        lineas.append(f"• {h['hoja']}: {h['contenido']} Uso: {h['uso']}")
+    return "\n".join(lineas)
+
 
 def enrich_habitable_cruce(df: pd.DataFrame) -> pd.DataFrame:
     """Añade columnas explícitas de cruce Habitable, estatus y cola de contacto."""
@@ -334,6 +393,9 @@ def excel_bytes_depurado(sol: pd.DataFrame) -> bytes:
     df = frame_export_depurado(sol)
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        pd.DataFrame(HOJAS_EXCEL_LEYENDA).to_excel(
+            writer, sheet_name="leyenda_hojas", index=False
+        )
         df.to_excel(writer, sheet_name="1x10_depurado", index=False)
         r = resumen_depuracion(sol)
         resumen_rows = [

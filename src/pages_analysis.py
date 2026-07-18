@@ -45,6 +45,7 @@ from depuracion_1x10 import (
     apply_export_filters,
     excel_bytes_depurado,
     resumen_depuracion,
+    texto_leyenda_hojas_excel,
 )
 
 
@@ -322,11 +323,22 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
                 use_container_width=True,
                 help="Una fila por código de caso + cruce Habitable + cola de contacto.",
             )
-            st.caption(
-                "Hojas: `1x10_depurado` · `cola_pendiente_casos` · "
-                "`casos_atendidos_informar` · `cruce_habitable` · "
-                "`estatus_habitable` · resumen."
-            )
+            with st.expander("Qué contiene cada pestaña del Excel", expanded=True):
+                st.markdown(
+                    """
+- **`cola_pendiente_casos`**: casos del 1×10 **sin** cruce útil con Habitable (aún no atendidos). Para la cola de contacto / pedir revisión.
+- **`casos_atendidos_informar`**: casos del 1×10 **ya cruzados** con Habitable (alta o media). Para informar al ciudadano.
+- **`1x10_depurado`**: **todos** los casos del filtro (pendientes + cruzados + dudosos), con denunciante y teléfono.
+- **`cruce_habitable`** / **`estatus_habitable`** / **`calidad_geo`** / **`resumen_depuracion`**: conteos y totales de apoyo.
+- **`leyenda_hojas`**: esta misma explicación dentro del archivo.
+                    """.strip()
+                )
+                st.caption(
+                    "Atajo: si solo necesitan no atendidos, abran "
+                    "`cola_pendiente_casos`. No hace falta filtrar a mano."
+                )
+                st.markdown("##### Texto para compartir")
+                st.code(texto_leyenda_hojas_excel(), language=None)
     except Exception as exc:  # noqa: BLE001
         st.warning(f"No se pudo generar el Excel depurado: {exc}")
 
