@@ -1,26 +1,4 @@
-"""
-Pipeline de datos del BI — limpieza, matching y parquet
-=======================================================
-
-Este módulo es el corazón del cruce 1×10 × Habitable.
-
-Pasos que ejecuta ``run_pipeline``:
-1. Leer Excel de solicitudes 1×10 y de inspecciones Habitable.
-2. Reparar coordenadas y marcar calidad geográfica (Venezuela, hotspot).
-3. Emparejar cada solicitud con la inspección Habitable más cercana
-   (BallTree haversine) y clasificar por similitud de nombre (rapidfuzz).
-4. Unificar reportes 1×10 del mismo sitio (~20 m).
-5. Guardar ``data/processed/*.parquet`` + ``summary.json`` para el BI.
-
-Uso CLI (desarrollo)::
-
-    python src/prepare_data.py
-
-Uso desde la UI: ``data_ingest.render_upload_panel`` llama a ``run_pipeline``.
-
-Colaboradores: al cambiar umbrales, actualicen también ``config.toml``
-y la sección de matching en ``DOCUMENTACION.md``.
-"""
+"""Prepara parquet de 1×10 y Habitable con matching a radio configurable."""
 
 from __future__ import annotations
 
@@ -47,10 +25,8 @@ from geo_utils import (  # noqa: E402
 )
 from dedupe_1x10 import dedupe_solicitudes, resumen_dedupe  # noqa: E402
 
-# Radio medio de la Tierra (m) para convertir radianes → metros en BallTree
 R_EARTH = 6_371_000.0
 OUT = ROOT / "data" / "processed"
-UPLOADS = ROOT / "data" / "uploads"
 
 
 def load_config() -> dict:
@@ -258,44 +234,15 @@ def run_pipeline(
     habitable_sheet: str | None = None,
     quiet: bool = False,
 ) -> dict:
-    """
-    Ejecuta limpieza + matching + escritura de parquet.
-
-    Resolución de rutas (en este orden):
-    1. Argumentos ``solicitudes_path`` / ``habitable_path`` (UI de carga).
-    2. Rutas no vacías en ``config.toml`` [sources].
-    3. Archivos por defecto en ``data/uploads/``.
-    """
+    """Ejecuta limpieza + matching + parquet. Retorna summary."""
     cfg = load_config()
     geo = cfg["geo"]
     match_cfg = cfg["matching"]
     sources = cfg["sources"]
 
-    default_sol = UPLOADS / "solicitudes_1x10.xlsx"
-    default_hab = UPLOADS / "inspecciones_habitable.xlsx"
-    cfg_sol = (sources.get("solicitudes_1x10") or "").strip()
-    cfg_hab = (sources.get("inspecciones_habitable") or "").strip()
-
-    sol_src = str(
-        solicitudes_path
-        or (cfg_sol if cfg_sol else default_sol)
-    )
-    hab_src = str(
-        habitable_path
-        or (cfg_hab if cfg_hab else default_hab)
-    )
+    sol_src = str(solicitudes_path or sources["solicitudes_1x10"])
+    hab_src = str(habitable_path or sources["inspecciones_habitable"])
     sheet = habitable_sheet or sources.get("habitable_sheet", "Inspecciones")
-
-    if not Path(sol_src).exists():
-        raise FileNotFoundError(
-            f"No se encontró Excel 1×10 en: {sol_src}. "
-            "Cárgalo desde la UI o configura [sources] en config.toml."
-        )
-    if not Path(hab_src).exists():
-        raise FileNotFoundError(
-            f"No se encontró Excel Habitable en: {hab_src}. "
-            "Cárgalo desde la UI o configura [sources] en config.toml."
-        )
 
     def _log(msg: str) -> None:
         if not quiet:
@@ -341,6 +288,9 @@ def run_pipeline(
         c
         for c in [
             "codigo_caso",
+            "cedula",
+            "denunciante",
+            "telefono",
             "estado",
             "estado_n",
             "municipio",
@@ -349,6 +299,8 @@ def run_pipeline(
             "parroquia_n",
             "direccion",
             "descripcion",
+            "lat_raw",
+            "lng_raw",
             "lat",
             "lng",
             "mapeable",

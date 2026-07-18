@@ -40,8 +40,130 @@ from habitable_reports import (
 )
 
 
+from depuracion_1x10 import excel_bytes_depurado, resumen_depuracion
+
+
 def fmt_num(n: float | int) -> str:
     return f"{int(n):,}".replace(",", ".")
+
+
+def _seccion_depuracion_1x10(sol: pd.DataFrame, summary: dict) -> None:
+    """Cómo se depuró el 1×10, resumen de correcciones y descarga Excel."""
+    from ui_theme import render_kpi_strip, render_section
+
+    r = resumen_depuracion(sol, summary)
+    render_section(
+        "Depuración del archivo 1×10",
+        "El Excel ciudadano se limpia antes del cruce con Habitable. "
+        "Aquí se resume qué se corrigió y qué queda pendiente de revisión.",
+    )
+
+    with st.expander("Cómo se depuró la información", expanded=False):
+        st.markdown(
+            f"""
+1. **Coordenadas** — se interpretan latitud/longitud (separadores, signos) y se
+   valida que caigan en Venezuela.
+2. **Calidad GPS** — se marcan puntos en mar abierto, fuera del estado declarado
+   o sin coordenadas (`calidad_geo`).
+3. **Territorio** — estado / municipio / parroquia se normalizan (mayúsculas,
+   espacios) para filtros y mapas.
+4. **Cruce Habitable** — vecinos a ≤ {r['radius_m']:.0f} m + similitud de
+   dirección/nombre; se clasifica atendida, pendiente o por revisar.
+5. **Unificación** — reportes a ≤ {r['dedupe_radius_m']:.0f} m se agrupan en una
+   ubicación representativa (`n_reportes`, `es_representante`).
+
+El archivo descargable conserva el **dato original** (cuando está disponible) y
+añade columnas depuradas (`*_n`, flags geo, cruce, unificación).
+            """.strip()
+        )
+
+    render_kpi_strip(
+        [
+            {
+                "label": "Total reportes",
+                "value": fmt_num(r["n_total"]),
+                "tone": "info",
+            },
+            {
+                "label": "Mapeables",
+                "value": fmt_num(r["n_mapeable"]),
+                "tone": "success",
+                "hint": f"{100 * r['n_mapeable'] / max(r['n_total'], 1):.1f}%",
+            },
+            {
+                "label": "Sin mapear",
+                "value": fmt_num(r["n_sin_mapear"]),
+                "tone": "warning",
+                "hint": "GPS inválido / incompleto",
+            },
+            {
+                "label": "GPS dudosos",
+                "value": fmt_num(r["n_gps_dudoso"]),
+                "tone": "flag",
+                "hint": "Mar o fuera del estado",
+            },
+            {
+                "label": "Por revisar (cruce)",
+                "value": fmt_num(r["n_por_revisar_match"]),
+                "tone": "muted",
+                "hint": "Cerca en mapa, nombre dudoso",
+            },
+        ]
+    )
+
+    st.markdown("#### Resumen de correcciones y pendientes")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(
+            f"""
+- **Ya cruzadas con Habitable (alta+media):** {fmt_num(r['n_ya_atendidas'])}
+- **Pendientes de atender (sin match útil):** {fmt_num(r['n_pendientes_atender'])}
+- **Ubicaciones unificadas:** {fmt_num(r.get('ubicaciones_unicas') or 0)}
+- **Sitios con varios reportes:** {fmt_num(r.get('ubicaciones_con_multiples_reportes') or 0)}
+            """.strip()
+        )
+    with c2:
+        st.markdown(
+            f"""
+- **Sin poderse mapear (revisar GPS):** {fmt_num(r['n_sin_mapear'])}
+- **Mapeables con GPS dudoso:** {fmt_num(r['n_gps_dudoso'])}
+- **Cruce dudoso (revisar nombre):** {fmt_num(r['n_por_revisar_match'])}
+- **Total pendiente de revisión:** {fmt_num(r['n_pendiente_revision'])}
+            """.strip()
+        )
+
+    if r["calidad_geo"]:
+        with st.expander("Detalle por calidad geográfica", expanded=False):
+            rows = []
+            from depuracion_1x10 import CALIDAD_GEO_DESC
+
+            for k, v in sorted(r["calidad_geo"].items(), key=lambda x: -x[1]):
+                rows.append(
+                    {
+                        "calidad_geo": k,
+                        "descripción": CALIDAD_GEO_DESC.get(k, ""),
+                        "n": v,
+                    }
+                )
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    try:
+        xlsx = excel_bytes_depurado(sol)
+        st.download_button(
+            "Descargar 1×10 depurado (Excel)",
+            data=xlsx,
+            file_name="solicitudes_1x10_depurado.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True,
+            help="Incluye columnas originales + depuradas y una hoja de resumen.",
+        )
+        st.caption(
+            "El Excel trae la hoja `1x10_depurado` (dato + flags) y "
+            "`resumen_depuracion` / `calidad_geo` para seguimiento."
+        )
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"No se pudo generar el Excel depurado: {exc}")
 
 
 def page_1x10(sol: pd.DataFrame, summary: dict):
@@ -52,6 +174,8 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
         "Demanda ciudadana: volumen, territorio y estado frente a Habitable. "
         f"Ubicaciones unificadas a {summary.get('dedupe_radius_m', 20)} m.",
     )
+
+    _seccion_depuracion_1x10(sol, summary)
 
     use_unique = st.toggle(
         "Usar ubicaciones unificadas (recomendado)",

@@ -109,7 +109,7 @@ El BI lee esos archivos en cada sesión (con caché Streamlit).
 ### 4.1 Pestañas principales
 
 1. **Mapa operativo** — capas Habitable, coincidencias, pendientes, dudosos; búsqueda; embudo; tabla por estado.
-2. **Análisis 1×10** — demanda, % atendidas/pendientes, territorio, listados.
+2. **Análisis 1×10** — demanda, depuración del Excel (cómo se limpió, pendientes de revisión GPS/cruce) y descarga del universo depurado (original + columnas adicionales).
 3. **Análisis Habitable** — semáforo (verde · amarillo · rojo+negro) y secciones:
    - **Matriz semáforo** — cruce etiqueta × riesgos A/B/C, tipología (pisos/uso/material) y filtros territoriales.
    - **Explorar / reportería** — PyGWalker: el usuario arma tablas y gráficos arrastrando campos.
