@@ -25,6 +25,7 @@ from habitable_reports import (
     etiqueta_counts,
     externo_breakdown,
     filter_territorio,
+    habitable_explore_frame,
     list_view,
     mask_externo_alto,
     mask_externo_moderado,
@@ -290,6 +291,7 @@ def page_habitable(hab: pd.DataFrame, summary: dict):
     sec = render_section_tabs(
         [
             ("matriz", "Matriz semáforo"),
+            ("explorar", "Explorar / reportería"),
             ("ne", "No estructurales"),
             ("mod", "Estructurales moderados"),
             ("sev", "Severos y externos"),
@@ -299,12 +301,87 @@ def page_habitable(hab: pd.DataFrame, summary: dict):
     )
     if sec == "matriz":
         _tab_matriz_semaforo(hab)
+    elif sec == "explorar":
+        _tab_explorar_pygwalker(hab)
     elif sec == "ne":
         _tab_no_estructural(hab)
     elif sec == "mod":
         _tab_moderado(hab)
     else:
         _tab_severo_externo(hab)
+
+
+def _tab_explorar_pygwalker(hab: pd.DataFrame):
+    """Ventana PyGWalker: el usuario construye sus propios análisis/reportes."""
+    import streamlit.components.v1 as components
+
+    from ui_theme import render_section
+
+    render_section(
+        "Explorar / reportería libre",
+        "Arrastra campos a filas, columnas, color o tamaño para armar tablas y "
+        "gráficos. Parte del universo Habitable filtrado por territorio.",
+    )
+    st.caption(
+        "Herramienta: PyGWalker (Graphic Walker). Los gráficos se construyen "
+        "en esta sesión; no sustituyen los reportes oficiales de la matriz."
+    )
+
+    base = _hab_filters(hab, "explore")
+    explore = habitable_explore_frame(base)
+    if explore.empty:
+        st.warning("Sin filas en el filtro actual.")
+        return
+
+    # Tope para no saturar memoria/HTML en instancias pequeñas
+    max_rows = st.slider(
+        "Máx. filas en el explorador",
+        min_value=500,
+        max_value=min(len(explore), 10000),
+        value=min(len(explore), 5000),
+        step=500,
+        help="Si el navegador va lento, baja este tope o acota el territorio.",
+        key="explore_max_rows",
+    )
+    if len(explore) > max_rows:
+        explore = explore.sample(max_rows, random_state=42)
+        st.caption(
+            f"Muestra aleatoria de {fmt_num(max_rows)} filas "
+            f"(universo filtrado: {fmt_num(len(base))})."
+        )
+
+    st.info(
+        f"Vista inicial · {fmt_num(len(explore))} inspecciones · "
+        f"{len(explore.columns)} campos. "
+        "Sugerencia: `etiqueta` o `semaforo_grupo` en color; "
+        "`estado` / `num_pisos` en ejes."
+    )
+
+    with st.expander("Campos disponibles en esta vista", expanded=False):
+        st.write(", ".join(explore.columns.tolist()))
+
+    try:
+        import pygwalker as pyg
+    except ImportError:
+        st.error(
+            "Falta instalar PyGWalker. En el entorno del BI ejecuta: "
+            "`pip install pygwalker`"
+        )
+        return
+
+    # Embed HTML (compatible con Streamlit reciente; evita API Tornado rota)
+    from io import BytesIO
+
+    buf = BytesIO()
+    explore.to_parquet(buf, index=False)
+    payload = buf.getvalue()
+
+    @st.cache_data(show_spinner="Generando explorador PyGWalker…")
+    def _pyg_html(data_bytes: bytes) -> str:
+        return pyg.to_html(pd.read_parquet(BytesIO(data_bytes)))
+
+    html = _pyg_html(payload)
+    components.html(html, height=920, scrolling=True)
 
 
 def _tab_matriz_semaforo(hab: pd.DataFrame):

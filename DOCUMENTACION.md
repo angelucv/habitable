@@ -112,6 +112,7 @@ El BI lee esos archivos en cada sesión (con caché Streamlit).
 2. **Análisis 1×10** — demanda, % atendidas/pendientes, territorio, listados.
 3. **Análisis Habitable** — semáforo (verde · amarillo · rojo+negro) y secciones:
    - **Matriz semáforo** — cruce etiqueta × riesgos A/B/C, tipología (pisos/uso/material) y filtros territoriales.
+   - **Explorar / reportería** — PyGWalker: el usuario arma tablas y gráficos arrastrando campos.
    - Reportes de daños: no estructurales · moderados · severos/externos.
    - No estructurales
    - Estructurales moderados

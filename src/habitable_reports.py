@@ -274,6 +274,76 @@ def list_view(df: pd.DataFrame, limit: int = 500) -> pd.DataFrame:
     return df[cols].head(limit)
 
 
+# Columnas útiles para PyGWalker (sin texto libre pesado / PII)
+EXPLORE_COLS = [
+    "etiqueta_n",
+    "estado_n",
+    "municipio_n",
+    "uso_n",
+    "material_n",
+    "num_pisos_n",
+    "riesgo_externo",
+    "riesgo_severo",
+    "riesgo_moderado",
+    "riesgo_componentes",
+    "alta_confianza",
+    "mapeable",
+    "mapa_ok",
+    "lat",
+    "lng",
+    "nombre_edificacion",
+    "direccion",
+    "inspector_nombre",
+    "created_at",
+]
+
+
+def habitable_explore_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Vista inicial para reportería libre (PyGWalker).
+    Renombra columnas a etiquetas legibles en español.
+    """
+    keep = [c for c in EXPLORE_COLS if c in df.columns]
+    out = df[keep].copy()
+    # Normaliza riesgos a A/B/C/VACIO para facilitar pivotes
+    for c in [
+        "riesgo_externo",
+        "riesgo_severo",
+        "riesgo_moderado",
+        "riesgo_componentes",
+    ]:
+        if c in out.columns:
+            x = out[c].fillna("").astype(str).str.strip().str.upper()
+            out[c] = x.where(x.isin(["A", "B", "C"]), "VACIO")
+    if "etiqueta_n" in out.columns:
+        out["etiqueta_n"] = (
+            out["etiqueta_n"].fillna("").astype(str).str.upper().str.strip()
+        )
+    rename = {
+        "etiqueta_n": "etiqueta",
+        "estado_n": "estado",
+        "municipio_n": "municipio",
+        "uso_n": "uso",
+        "material_n": "material",
+        "num_pisos_n": "num_pisos",
+        "alta_confianza": "alta_confianza_gps",
+        "inspector_nombre": "inspector",
+        "created_at": "fecha_inspeccion",
+    }
+    out = out.rename(columns={k: v for k, v in rename.items() if k in out.columns})
+    # Flag semáforo agregado (útil para color / filtros del usuario)
+    if "etiqueta" in out.columns:
+        out["semaforo_grupo"] = out["etiqueta"].map(
+            {
+                "VERDE": "Verde",
+                "AMARILLO": "Amarillo",
+                "ROJO": "Rojo+negro",
+                "NEGRO": "Rojo+negro",
+            }
+        ).fillna("Otro")
+    return out
+
+
 # —— Matriz semáforo × riesgos / tipología (ensayo BI) ——
 
 ETIQUETA_MAIN = ["VERDE", "AMARILLO", "ROJO", "NEGRO"]
