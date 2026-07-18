@@ -185,8 +185,25 @@ python src/prepare_data.py
 |----------|-----|
 | `BI_PASSWORD` | Contraseña para entrar al tablero |
 | `PYTHONUNBUFFERED` | `1` (logs inmediatos) |
+| `BI_LOW_MEMORY` | `1` = mapa con tope de marcadores (activo en Docker/Render) |
+| `BI_MAP_MAX_MARKERS` | Tope por capa (default `900` en bajo consumo) |
+| `BI_ALLOW_HEAVY_PIPELINE` | `1` = permite «Procesar cruce» en bajo consumo (riesgo OOM) |
+| `MALLOC_ARENA_MAX` | `2` (reduce fragmentación de RAM en Linux) |
 
-### 7.3 Disco persistente (importante)
+### 7.3 Memoria (alerta Render «exceeded its memory limit»)
+
+El plan free (~512 MB) se reinicia si el mapa pinta decenas de miles de marcadores Folium o si se regenera el cruce desde Excel in-process.
+
+Mitigaciones ya incluidas:
+
+- Modo bajo consumo automático en Render.
+- Por defecto: marcadores Habitable + coincidencias; **pendientes en heatmap**.
+- Tope ~900 marcadores/capa (ajustable en Extras del mapa).
+- Pipeline Excel bloqueado salvo `BI_ALLOW_HEAVY_PIPELINE=1`.
+
+Si sigue fallando: subir el servicio a **Starter (1 GB)** o filtrar territorio antes de abrir el mapa nacional con todas las capas de marcadores.
+
+### 7.4 Disco persistente (importante)
 
 En el plan free de Render el sistema de archivos puede **reiniciarse**. Los Excel/parquet subidos se pierden al redeploy si no hay disco.
 
@@ -194,19 +211,20 @@ Opciones:
 
 - **Render Disk** montado en `/app/data` (recomendado en producción real).
 - O volver a subir Excel tras cada deploy (aceptable en piloto).
+- En free: procesar el cruce **en local** y desplegar los parquet ya generados (el botón de procesar está bloqueado en bajo consumo).
 
-### 7.4 Primera visita en producción
+### 7.5 Primera visita en producción
 
 1. Abrir la URL de Render.
 2. Introducir la contraseña (`BI_PASSWORD`).
-3. Cargar Excel 1×10 y Habitable → **Procesar cruce**.
+3. Si no hay parquet: generarlos en local y desplegarlos, o (con más RAM / `BI_ALLOW_HEAVY_PIPELINE`) cargar Excel → **Procesar cruce**.
 4. Validar mapa y las dos pestañas de análisis.
 
-### 7.5 Comando equivalente local al contenedor
+### 7.6 Comando equivalente local al contenedor
 
 ```bash
 docker build -t bi-habitable .
-docker run -p 10000:10000 -e BI_PASSWORD=demo bi-habitable
+docker run -p 10000:10000 -e BI_PASSWORD=demo -e BI_LOW_MEMORY=0 bi-habitable
 ```
 
 ---

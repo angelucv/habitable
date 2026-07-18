@@ -24,6 +24,7 @@ Colaboradores: ver DOCUMENTACION.md en la raíz del repositorio.
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import sys
@@ -42,12 +43,16 @@ from charts_echarts import bar_vertical  # noqa: E402
 from data_ingest import render_upload_panel  # noqa: E402
 from map_robust import render_map_ui  # noqa: E402
 from pages_analysis import page_1x10, page_habitable  # noqa: E402
+from runtime_limits import is_low_memory  # noqa: E402
 from ui_theme import (  # noqa: E402
     inject_executive_css,
     render_hero,
     render_kpi_strip,
     render_section,
 )
+
+# Texto libre pesado: no hace falta en el BI en memoria
+_DROP_HEAVY = {"observaciones"}
 
 
 def check_password() -> bool:
@@ -88,8 +93,24 @@ def check_password() -> bool:
 @st.cache_data(show_spinner="Cargando datos procesados…")
 def load_data():
     """Lee parquet + summary generados por prepare_data / carga UI."""
-    sol = pd.read_parquet(DATA / "solicitudes.parquet")
-    hab = pd.read_parquet(DATA / "inspecciones.parquet")
+    sol_path = DATA / "solicitudes.parquet"
+    hab_path = DATA / "inspecciones.parquet"
+    if is_low_memory():
+        try:
+            import pyarrow.parquet as pq
+
+            def _read(path: Path) -> pd.DataFrame:
+                names = [n for n in pq.read_schema(path).names if n not in _DROP_HEAVY]
+                return pd.read_parquet(path, columns=names)
+
+            sol = _read(sol_path)
+            hab = _read(hab_path)
+        except Exception:  # noqa: BLE001
+            sol = pd.read_parquet(sol_path)
+            hab = pd.read_parquet(hab_path)
+    else:
+        sol = pd.read_parquet(sol_path)
+        hab = pd.read_parquet(hab_path)
     summary = json.loads((DATA / "summary.json").read_text(encoding="utf-8"))
     return sol, hab, summary
 
@@ -327,6 +348,11 @@ def main():
         kicker="Comisión Presidencial · Evaluación de Habitabilidad",
     )
 
+    if is_low_memory():
+        st.caption(
+            "Servicio en modo bajo consumo de memoria · mapa con tope de marcadores."
+        )
+
     # Carga de Excel y regeneración del matching (actualiza las 3 pestañas)
     with st.expander("Cargar / actualizar archivos fuente", expanded=not ensure_data_ready()):
         render_upload_panel()
@@ -335,6 +361,7 @@ def main():
         st.stop()
 
     sol, hab, summary = load_data()
+    gc.collect()
 
     with st.sidebar:
         st.markdown("### Panorama nacional")

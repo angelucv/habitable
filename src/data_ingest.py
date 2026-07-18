@@ -13,12 +13,14 @@ Los archivos se guardan en ``data/uploads/`` (no se versionan en Git).
 
 from __future__ import annotations
 
+import gc
 from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 
 from prepare_data import run_pipeline
+from runtime_limits import allow_heavy_pipeline, is_low_memory
 from ui_theme import render_section
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,17 +77,30 @@ def render_upload_panel() -> None:
         if path_hab.exists() and not f2:
             st.caption(f"En uso: {path_hab.name}")
 
+    if is_low_memory() and not allow_heavy_pipeline():
+        st.warning(
+            "En este servicio (poca RAM) regenerar el cruce desde Excel suele "
+            "provocar reinicio por memoria. Procesa en local (`python -m prepare_data`) "
+            "y despliega los parquet, o define `BI_ALLOW_HEAVY_PIPELINE=1` "
+            "y sube de plan en Render (p. ej. 1 GB+)."
+        )
+
     b1, b2 = st.columns([2, 1])
     with b1:
         run = st.button(
             "Procesar cruce y actualizar pestañas",
             type="primary",
             use_container_width=True,
+            disabled=is_low_memory() and not allow_heavy_pipeline(),
         )
     with b2:
         st.caption("Puede tardar 1–2 minutos con archivos grandes.")
 
     if run:
+        if is_low_memory() and not allow_heavy_pipeline():
+            st.error("Pipeline bloqueado en modo bajo consumo.")
+            return
+
         if f1:
             _save_upload(f1, path_1x10)
         if f2:
@@ -109,6 +124,8 @@ def render_upload_panel() -> None:
             except Exception as exc:  # noqa: BLE001
                 st.error(f"No se pudo procesar: {exc}")
                 return
+            finally:
+                gc.collect()
 
         META_PATH.write_text(
             datetime.now().isoformat(timespec="seconds"),

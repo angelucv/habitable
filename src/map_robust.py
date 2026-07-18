@@ -16,11 +16,15 @@ from __future__ import annotations
 import html as html_lib
 from typing import Any
 
+import gc
+
 import folium
 from folium.plugins import FastMarkerCluster, HeatMap, MarkerCluster, MeasureControl, MiniMap
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+from runtime_limits import heat_max_points, is_low_memory, map_max_markers
 
 # Basemaps públicos (sin API key)
 BASEMAPS: dict[str, tuple[str, str, str]] = {
@@ -310,12 +314,16 @@ def _add_heatmap(
     *,
     name: str,
     show: bool = False,
+    max_points: int | None = None,
 ) -> None:
     if df is None or df.empty:
         return
     data = df.dropna(subset=["lat", "lng"])
     if data.empty:
         return
+    cap = max_points if max_points is not None else heat_max_points()
+    if len(data) > cap:
+        data = data.sample(cap, random_state=42)
     pts = data[["lat", "lng"]].astype(float).values.tolist()
     fg = folium.FeatureGroup(name=name, show=show)
     HeatMap(pts, radius=12, blur=16, max_zoom=15, min_opacity=0.3).add_to(fg)
@@ -345,6 +353,7 @@ def build_map(
     focus_zoom: int = 17,
     highlight: pd.DataFrame | None = None,
     show_minimap: bool = False,
+    show_measure: bool = True,
 ) -> folium.Map:
     if focus_lat is not None and focus_lng is not None:
         lat, lng, zoom = float(focus_lat), float(focus_lng), focus_zoom
@@ -367,14 +376,13 @@ def build_map(
                 continue
             _tile_layer(key, show=False).add_to(fmap)
 
-    # Heatmaps primero (baratos); marcadores después
-    if show_heat_pend and show_solo:
+    # Heatmaps primero (livianos); no exigen la capa de marcadores
+    if show_heat_pend:
         _add_heatmap(fmap, solo, name="Densidad pendientes", show=True)
-    if show_heat_hab and show_hab:
-        _add_heatmap(fmap, hab_map, name="Densidad inspecciones", show=False)
+    if show_heat_hab:
+        _add_heatmap(fmap, hab_map, name="Densidad inspecciones", show=True)
 
-    if show_hab and not (show_heat_hab and max_markers is not None and max_markers <= 0):
-        # Si hay heatmap hab y modo muy agresivo, se puede omitir; normalmente mostramos ambos
+    if show_hab:
         _add_habitable_fast(fmap, hab_map, show=True, max_markers=max_markers)
 
     if show_coin:
@@ -433,12 +441,13 @@ def build_map(
 
     if show_minimap:
         MiniMap(toggle_display=True, position="bottomleft").add_to(fmap)
-    MeasureControl(position="topleft").add_to(fmap)
+    if show_measure:
+        MeasureControl(position="topleft").add_to(fmap)
     folium.LayerControl(collapsed=True, position="topright").add_to(fmap)
     return fmap
 
 
-@st.cache_data(show_spinner="Generando mapa…", ttl=600)
+@st.cache_data(show_spinner="Generando mapa…", ttl=300, max_entries=2)
 def _cached_map_html(
     *,
     coin_bytes: bytes,
@@ -461,6 +470,7 @@ def _cached_map_html(
     focus_lat: float | None,
     focus_lng: float | None,
     show_minimap: bool,
+    show_measure: bool = True,
 ) -> str:
     """Cachea el HTML del mapa para no regenerar con los mismos filtros."""
     from io import BytesIO
@@ -491,8 +501,12 @@ def _cached_map_html(
         focus_lng=focus_lng,
         highlight=read(highlight_bytes) if highlight_bytes else None,
         show_minimap=show_minimap,
+        show_measure=show_measure,
     )
-    return fmap.get_root().render()
+    html = fmap.get_root().render()
+    del fmap
+    gc.collect()
+    return html
 
 
 def _df_to_bytes(df: pd.DataFrame | None, cols: list[str] | None = None) -> bytes:
@@ -542,9 +556,24 @@ def render_map_ui(
     # —— Cartografía ——
     from ui_theme import render_section
 
+    low_mem = is_low_memory()
+    default_cap = map_max_markers()
+
+    if low_mem:
+        st.info(
+            "Modo bajo consumo (Render): el mapa limita marcadores por capa y "
+            "usa densidad para pendientes. Filtra por estado o sube de plan "
+            "si necesitas ver todos los puntos a la vez."
+        )
+
     render_section(
         "Cartografía",
-        "Elige mapa base y vista. Todas las bases quedan en el control de capas del mapa.",
+        "Elige mapa base y vista."
+        + (
+            " En bajo consumo solo se carga la base seleccionada."
+            if low_mem
+            else " Todas las bases quedan en el control de capas del mapa."
+        ),
     )
     c1, c2 = st.columns(2)
     with c1:
@@ -561,11 +590,13 @@ def render_map_ui(
             list(VIEWS.keys()),
             help="Encadre al cargar. La búsqueda puede recentrar el mapa.",
         )
-    st.caption(
-        "Cambio de base también disponible en el control de capas del mapa (arriba a la derecha)."
-    )
+    if not low_mem:
+        st.caption(
+            "Cambio de base también disponible en el control de capas del mapa "
+            "(arriba a la derecha)."
+        )
 
-    # —— Capas de datos (mismo esquema del canvas mockup) ——
+    # —— Capas de datos ——
     render_section(
         "Capas de datos",
         "Dudosos apagados por defecto. Coincidencias = ya atendidas (alta + media).",
@@ -577,14 +608,21 @@ def render_map_ui(
         "Dudosos geo",
         "Todas solicitudes 1×10",
     ]
-    layers = st.multiselect(
-        "Qué mostrar en el mapa",
-        options=layer_opts,
-        default=[
+    # En bajo consumo: marcadores solo Habitable + coincidencias;
+    # pendientes van por heatmap (mucho menos RAM).
+    default_layers = (
+        ["Habitable", "Coincidencias (alta+media)"]
+        if low_mem
+        else [
             "Habitable",
             "Coincidencias (alta+media)",
             "Solo 1×10 (pendientes)",
-        ],
+        ]
+    )
+    layers = st.multiselect(
+        "Qué mostrar en el mapa (marcadores)",
+        options=layer_opts,
+        default=default_layers,
         help="Como en el mockup: Dudosos apagados por defecto. "
         "Coincidencias = ya atendidas (match alta+media).",
     )
@@ -597,8 +635,8 @@ def render_map_ui(
     heat_opts = st.multiselect(
         "Densidad (heatmap)",
         options=["Pendientes", "Inspecciones Habitable"],
-        default=[],
-        help="Capa extra de densidad. Los puntos de las capas de arriba se muestran completos.",
+        default=["Pendientes"] if low_mem else [],
+        help="Capa de densidad (liviana). No requiere activar marcadores de la misma capa.",
     )
     show_heat_pend = "Pendientes" in heat_opts
     show_heat_hab = "Inspecciones Habitable" in heat_opts
@@ -663,15 +701,30 @@ def render_map_ui(
     # —— Extras ——
     with st.expander("Extras del mapa", expanded=False):
         show_minimap = st.checkbox("Mini-mapa", value=False)
-        st.caption(
-            "El mapa pinta todos los puntos de las capas seleccionadas "
-            "según el filtro territorial. Si tarda, reduce capas o filtra por estado."
+        if low_mem or default_cap is not None:
+            cap_ui = st.number_input(
+                "Máx. marcadores por capa",
+                min_value=200,
+                max_value=8000,
+                value=int(default_cap or 900),
+                step=100,
+                help="Baja este valor si el servicio se reinicia por memoria.",
+            )
+            max_markers = int(cap_ui)
+        else:
+            max_markers = None
+            st.caption(
+                "Sin tope de marcadores. Si el mapa tarda, filtra por estado "
+                "o activa modo bajo consumo (BI_LOW_MEMORY=1)."
+            )
+        show_extra = st.checkbox(
+            "Cargar todos los mapas base en el control de capas",
+            value=not low_mem,
         )
-
-    # Sin tope: todos los puntos del filtro actual
-    max_markers = None
-    # Siempre cargar todas las bases en el LayerControl del mapa
-    show_extra = True
+        show_measure = st.checkbox(
+            "Herramienta de medición",
+            value=not low_mem,
+        )
 
     html = _cached_map_html(
         coin_bytes=_df_to_bytes(coin, _SOL_COLS),
@@ -680,7 +733,7 @@ def render_map_ui(
         hab_bytes=_df_to_bytes(hab_map, _HAB_COLS),
         sol_bytes=_df_to_bytes(sol_map if show_1x10 else None, _SOL_COLS),
         highlight_bytes=_df_to_bytes(
-            highlight.head(80) if not highlight.empty else None, _SOL_COLS
+            highlight.head(40) if not highlight.empty else None, _SOL_COLS
         ),
         basemap=basemap,
         view_name=view_name,
@@ -696,10 +749,19 @@ def render_map_ui(
         focus_lat=focus_lat,
         focus_lng=focus_lng,
         show_minimap=show_minimap,
+        show_measure=show_measure,
     )
     components.html(html, height=640, scrolling=False)
+    del html
+    gc.collect()
 
+    cap_note = (
+        f" Tope {max_markers} marcadores/capa."
+        if max_markers
+        else ""
+    )
     st.caption(
         "Leyenda: semáforo Habitable · violeta = atendidas · naranja = pendientes · "
         "gris = dudosos · rojo = búsqueda · control de capas / mapas base arriba a la derecha."
+        + cap_note
     )
