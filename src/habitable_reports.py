@@ -272,3 +272,180 @@ LIST_COLS = [
 def list_view(df: pd.DataFrame, limit: int = 500) -> pd.DataFrame:
     cols = [c for c in LIST_COLS if c in df.columns]
     return df[cols].head(limit)
+
+
+# —— Matriz semáforo × riesgos / tipología (ensayo BI) ——
+
+ETIQUETA_MAIN = ["VERDE", "AMARILLO", "ROJO", "NEGRO"]
+RIESGO_LEVELS = ["A", "B", "C", "VACIO"]
+PISO_BANDS = ["1", "2", "3", "4-5", "6-10", "11-20", "21+"]
+
+RISK_DIMS = {
+    "riesgo_externo": "Riesgo externo",
+    "riesgo_severo": "Riesgo severo",
+    "riesgo_moderado": "Riesgo moderado",
+    "riesgo_componentes": "Riesgo componentes",
+    "peor_riesgo": "Peor riesgo (máx. de los 4)",
+}
+
+
+def _clean_etiqueta(series: pd.Series) -> pd.Series:
+    x = series.fillna("").astype(str).str.upper().str.strip()
+    return x.where(x.isin(ETIQUETA_MAIN), "OTRO")
+
+
+def _clean_abc(series: pd.Series) -> pd.Series:
+    x = series.fillna("").astype(str).str.strip().str.upper()
+    return x.where(x.isin(["A", "B", "C"]), "VACIO")
+
+
+def _worst_riesgo(df: pd.DataFrame) -> pd.Series:
+    rank = {"VACIO": 0, "A": 1, "B": 2, "C": 3}
+    inv = {0: "VACIO", 1: "A", 2: "B", 3: "C"}
+    cols = [
+        "riesgo_externo",
+        "riesgo_severo",
+        "riesgo_moderado",
+        "riesgo_componentes",
+    ]
+    ranked = []
+    for c in cols:
+        s = _clean_abc(df[c]) if c in df.columns else pd.Series("VACIO", index=df.index)
+        ranked.append(s.map(rank).fillna(0).astype(int))
+    worst = pd.concat(ranked, axis=1).max(axis=1)
+    return worst.map(inv)
+
+
+def prepare_matriz_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Copia con columnas normalizadas para matrices del ensayo."""
+    out = df.copy()
+    out["et"] = _clean_etiqueta(out.get("etiqueta_n", pd.Series(index=out.index)))
+    out = out[out["et"].isin(ETIQUETA_MAIN)].copy()
+    for c in [
+        "riesgo_externo",
+        "riesgo_severo",
+        "riesgo_moderado",
+        "riesgo_componentes",
+    ]:
+        if c in out.columns:
+            out[c + "_n"] = _clean_abc(out[c])
+        else:
+            out[c + "_n"] = "VACIO"
+    out["peor_riesgo_n"] = _worst_riesgo(out)
+
+    pisos = pd.to_numeric(out.get("num_pisos_n", out.get("num_pisos")), errors="coerce")
+    out["piso_band"] = pd.cut(
+        pisos,
+        bins=[-0.1, 1, 2, 3, 5, 10, 20, 200],
+        labels=PISO_BANDS,
+    ).astype(str)
+    out.loc[~out["piso_band"].isin(PISO_BANDS), "piso_band"] = "Sin dato"
+
+    uso = out.get("uso_n", out.get("uso", pd.Series("", index=out.index)))
+    uso = uso.fillna("Sin dato").astype(str).str.strip().replace({"": "Sin dato"})
+    top_uso = uso.value_counts().head(6).index
+    out["uso_g"] = uso.where(uso.isin(top_uso), "Otros")
+
+    mat = out.get("material_n", out.get("material", pd.Series("", index=out.index)))
+    mat = mat.fillna("Sin dato").astype(str)
+
+    def _mat_group(x: str) -> str:
+        xl = x.lower()
+        if "informal" in xl:
+            return "Mampostería informal"
+        if "formal" in xl or "mamposter" in xl:
+            return "Mampostería formal"
+        if "concreto" in xl:
+            return "Concreto"
+        if "acero" in xl:
+            return "Acero"
+        if any(k in xl for k in ("dual", "pórtico", "portico", "muro")):
+            return "Dual / pórticos / muros"
+        if x == "Sin dato":
+            return "Sin dato"
+        return "Otros"
+
+    out["material_g"] = mat.map(_mat_group)
+    return out
+
+
+def crosstab_etiqueta(
+    df: pd.DataFrame,
+    col: str,
+    col_order: list[str] | None = None,
+) -> pd.DataFrame:
+    """Matriz etiqueta × columna con márgenes Total."""
+    work = df if "et" in df.columns else prepare_matriz_frame(df)
+    if col not in work.columns:
+        return pd.DataFrame()
+    ct = pd.crosstab(work["et"], work[col])
+    ct = ct.reindex(index=ETIQUETA_MAIN, fill_value=0)
+    if col_order:
+        for c in col_order:
+            if c not in ct.columns:
+                ct[c] = 0
+        ct = ct[[c for c in col_order if c in ct.columns]]
+    ct["Total"] = ct.sum(axis=1)
+    ct.loc["Total"] = ct.sum(axis=0)
+    return ct.astype(int)
+
+
+def semaforo_mix_by(
+    df: pd.DataFrame,
+    col: str,
+    categories: list[str] | None = None,
+) -> pd.DataFrame:
+    """
+    Por categoría: n, % verde, % amarillo, % rojo+negro.
+    Filas = categorías de ``col``.
+    """
+    work = df if "et" in df.columns else prepare_matriz_frame(df)
+    if col not in work.columns or work.empty:
+        return pd.DataFrame(columns=["categoria", "n", "pct_verde", "pct_amarillo", "pct_rojo_negro"])
+
+    rows = []
+    cats = categories or [
+        c for c in work[col].dropna().astype(str).unique().tolist() if c and c != "nan"
+    ]
+    for cat in cats:
+        sub = work[work[col].astype(str) == str(cat)]
+        n = len(sub)
+        if n == 0:
+            continue
+        rows.append(
+            {
+                "categoria": str(cat),
+                "n": n,
+                "pct_verde": round(100 * (sub["et"] == "VERDE").mean(), 1),
+                "pct_amarillo": round(100 * (sub["et"] == "AMARILLO").mean(), 1),
+                "pct_rojo_negro": round(
+                    100 * sub["et"].isin(["ROJO", "NEGRO"]).mean(), 1
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def risk_profile_top(df: pd.DataFrame, n: int = 12) -> pd.DataFrame:
+    """Top perfiles Ext|Sev|Mod|Comp en el filtro actual."""
+    work = df if "et" in df.columns else prepare_matriz_frame(df)
+    if work.empty:
+        return pd.DataFrame(columns=["perfil", "n", "pct"])
+    combo = (
+        work["riesgo_externo_n"]
+        + "|"
+        + work["riesgo_severo_n"]
+        + "|"
+        + work["riesgo_moderado_n"]
+        + "|"
+        + work["riesgo_componentes_n"]
+    )
+    vc = combo.value_counts().head(n)
+    total = max(len(work), 1)
+    return pd.DataFrame(
+        {
+            "perfil": vc.index.astype(str),
+            "n": vc.values.astype(int),
+            "pct": (100 * vc.values / total).round(1),
+        }
+    )

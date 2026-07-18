@@ -150,6 +150,65 @@ def bar_vertical(
     }
 
 
+def bar_stacked_pct(
+    title: str,
+    categories: Sequence[str],
+    series: Sequence[tuple[str, Sequence[float], str]],
+) -> dict:
+    """
+    Barras apiladas al 100%.
+    series: [(nombre, valores_%, color_hex), ...]
+    """
+    series_opts = []
+    for i, (name, vals, color) in enumerate(series):
+        series_opts.append(
+            {
+                "name": name,
+                "type": "bar",
+                "stack": "semaforo",
+                "emphasis": {"focus": "series"},
+                "itemStyle": {
+                    "color": color,
+                    "borderRadius": [4, 4, 0, 0] if i == len(series) - 1 else 0,
+                },
+                "data": [round(float(v), 1) for v in vals],
+                "barMaxWidth": 48,
+            }
+        )
+    return {
+        "backgroundColor": "transparent",
+        "title": {
+            "text": title,
+            "left": "center",
+            "top": 8,
+            "textStyle": {"color": "#0C2340", "fontSize": 14, "fontWeight": 600},
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
+        },
+        "legend": {
+            "bottom": 4,
+            "left": "center",
+            "textStyle": _base_text(),
+        },
+        "grid": {"left": 48, "right": 16, "top": 48, "bottom": 72, "containLabel": True},
+        "xAxis": {
+            "type": "category",
+            "data": list(categories),
+            "axisLabel": {**_base_text(), "rotate": 30, "interval": 0, "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#D8DEE6"}},
+        },
+        "yAxis": {
+            "type": "value",
+            "max": 100,
+            "axisLabel": {**_base_text(), "formatter": "{value}%"},
+            "splitLine": {"lineStyle": {"color": "#E8EDF2"}},
+        },
+        "series": series_opts,
+    }
+
+
 def bar_horizontal(title: str, categories: Sequence[str], values: Sequence[float]) -> dict:
     cols = PALETTE[: max(len(categories), 1)]
     # ECharts horizontal: categories on y, reverse for top-first

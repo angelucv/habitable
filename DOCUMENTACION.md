@@ -110,7 +110,9 @@ El BI lee esos archivos en cada sesión (con caché Streamlit).
 
 1. **Mapa operativo** — capas Habitable, coincidencias, pendientes, dudosos; búsqueda; embudo; tabla por estado.
 2. **Análisis 1×10** — demanda, % atendidas/pendientes, territorio, listados.
-3. **Análisis Habitable** — semáforo y **tres secciones de reportes de daños**:
+3. **Análisis Habitable** — semáforo (verde · amarillo · rojo+negro) y secciones:
+   - **Matriz semáforo** — cruce etiqueta × riesgos A/B/C, tipología (pisos/uso/material) y filtros territoriales.
+   - Reportes de daños: no estructurales · moderados · severos/externos.
    - No estructurales
    - Estructurales moderados
    - Severos y externos  

@@ -1,12 +1,4 @@
-"""
-Páginas de análisis (pestañas 1×10 y Habitable)
-===============================================
-
-- ``page_1x10``: demanda ciudadana, territorio, pendientes.
-- ``page_habitable``: semáforo y tres secciones de reportes de daños
-  (no estructurales / moderados / severos-externos) según criterios
-  del documento técnico de la Comisión.
-"""
+"""Páginas de análisis 1×10 y Habitable (reportes de daños)."""
 
 from __future__ import annotations
 
@@ -19,12 +11,17 @@ from charts_echarts import (
     ETIQUETA_COLORS,
     MATCH_COLORS,
     bar_horizontal,
+    bar_stacked_pct,
     bar_vertical,
     donut,
 )
 from habitable_reports import (
+    PISO_BANDS,
+    RIESGO_LEVELS,
+    RISK_DIMS,
     component_presence_counts,
     count_cuadrillas,
+    crosstab_etiqueta,
     etiqueta_counts,
     externo_breakdown,
     filter_territorio,
@@ -35,6 +32,9 @@ from habitable_reports import (
     mask_no_estructural,
     mask_severo,
     moderado_band_summary,
+    prepare_matriz_frame,
+    risk_profile_top,
+    semaforo_mix_by,
     severo_mechanism_summary,
 )
 
@@ -254,28 +254,34 @@ def page_habitable(hab: pd.DataFrame, summary: dict):
         "(no estructurales · moderados · severos/externos).",
     )
 
-    rn = int(hab["etiqueta_n"].isin(["ROJO", "NEGRO"]).sum())
+    n_hab = max(len(hab), 1)
+    n_verde = int((hab["etiqueta_n"] == "VERDE").sum())
+    n_amarillo = int((hab["etiqueta_n"] == "AMARILLO").sum())
+    n_crit = int(hab["etiqueta_n"].isin(["ROJO", "NEGRO"]).sum())
     render_kpi_strip(
         [
             {"label": "Inspecciones", "value": fmt_num(len(hab)), "tone": "info"},
             {
-                "label": "Alta confianza",
-                "value": fmt_num(int(hab["alta_confianza"].sum())),
+                "label": "Verde",
+                "value": fmt_num(n_verde),
                 "tone": "success",
+                "hint": f"{100 * n_verde / n_hab:.1f}%",
             },
             {
-                "label": "Verde",
-                "value": fmt_num(int((hab["etiqueta_n"] == "VERDE").sum())),
-                "tone": "success",
+                "label": "Amarillo",
+                "value": fmt_num(n_amarillo),
+                "tone": "flag",
+                "hint": f"{100 * n_amarillo / n_hab:.1f}%",
             },
             {
                 "label": "Rojo + negro",
-                "value": fmt_num(rn),
+                "value": fmt_num(n_crit),
                 "tone": "warning",
+                "hint": f"{100 * n_crit / n_hab:.1f}%",
             },
             {
-                "label": "% crítico",
-                "value": f"{100 * rn / max(len(hab), 1):.1f}%",
+                "label": "Alta confianza",
+                "value": fmt_num(int(hab["alta_confianza"].sum())),
                 "tone": "muted",
             },
         ]
@@ -283,19 +289,187 @@ def page_habitable(hab: pd.DataFrame, summary: dict):
 
     sec = render_section_tabs(
         [
+            ("matriz", "Matriz semáforo"),
             ("ne", "No estructurales"),
             ("mod", "Estructurales moderados"),
             ("sev", "Severos y externos"),
         ],
         state_key="hab_dano",
-        heading="Secciones de reportes de daños",
+        heading="Secciones de análisis Habitable",
     )
-    if sec == "ne":
+    if sec == "matriz":
+        _tab_matriz_semaforo(hab)
+    elif sec == "ne":
         _tab_no_estructural(hab)
     elif sec == "mod":
         _tab_moderado(hab)
     else:
         _tab_severo_externo(hab)
+
+
+def _tab_matriz_semaforo(hab: pd.DataFrame):
+    """Ensayo local: cruces etiqueta × riesgos / tipología con filtro territorial."""
+    from ui_theme import render_kpi_strip, render_section
+
+    st.caption(
+        "Ensayo local · composición siempre en verde · amarillo · rojo+negro. "
+        "Los filtros recalculan N y todas las tablas."
+    )
+    base = _hab_filters(hab, "matriz")
+    work = prepare_matriz_frame(base)
+    if work.empty:
+        st.warning("Sin inspecciones con etiqueta V/A/R/N en el filtro actual.")
+        return
+
+    n = len(work)
+    n_v = int((work["et"] == "VERDE").sum())
+    n_a = int((work["et"] == "AMARILLO").sum())
+    n_c = int(work["et"].isin(["ROJO", "NEGRO"]).sum())
+    render_kpi_strip(
+        [
+            {"label": "En filtro", "value": fmt_num(n), "tone": "info"},
+            {
+                "label": "Verde",
+                "value": fmt_num(n_v),
+                "tone": "success",
+                "hint": f"{100 * n_v / n:.1f}%",
+            },
+            {
+                "label": "Amarillo",
+                "value": fmt_num(n_a),
+                "tone": "flag",
+                "hint": f"{100 * n_a / n:.1f}%",
+            },
+            {
+                "label": "Rojo + negro",
+                "value": fmt_num(n_c),
+                "tone": "warning",
+                "hint": f"{100 * n_c / n:.1f}%",
+            },
+        ]
+    )
+
+    render_section(
+        "Etiqueta × riesgos",
+        "A / B / C / vacío. Negros del dato Habitable; vacíos no se imputan.",
+    )
+    dim_labels = list(RISK_DIMS.values())
+    dim_keys = list(RISK_DIMS.keys())
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        dim_label = st.selectbox(
+            "Dimensión de riesgo",
+            options=dim_labels,
+            index=dim_keys.index("peor_riesgo"),
+            key="matriz_risk_dim",
+        )
+    with c2:
+        mode = st.radio(
+            "Valores",
+            options=["Conteo", "% fila"],
+            horizontal=True,
+            key="matriz_risk_mode",
+        )
+    dim_key = dim_keys[dim_labels.index(dim_label)]
+    col_src = "peor_riesgo_n" if dim_key == "peor_riesgo" else f"{dim_key}_n"
+    ct = crosstab_etiqueta(work, col_src, RIESGO_LEVELS)
+    if mode == "% fila":
+        show = ct.copy().astype(float)
+        for idx in show.index:
+            den = float(ct.loc[idx, "Total"]) or 1.0
+            show.loc[idx] = (ct.loc[idx] / den * 100).round(1)
+        st.dataframe(
+            show.rename(columns={"VACIO": "Vacío"}),
+            use_container_width=True,
+        )
+        st.caption("Porcentajes dentro de cada etiqueta (fila). Total de fila = 100%.")
+    else:
+        st.dataframe(
+            ct.rename(columns={"VACIO": "Vacío"}),
+            use_container_width=True,
+        )
+
+    # Margen de columnas como barras
+    margin = ct.loc["Total", RIESGO_LEVELS]
+    st_echarts(
+        bar_vertical(
+            f"Distribución — {dim_label}",
+            ["A", "B", "C", "Vacío"],
+            [int(margin[c]) for c in RIESGO_LEVELS],
+        ),
+        height="280px",
+        key="matriz_risk_margin",
+    )
+
+    render_section(
+        "Tipología × semáforo",
+        "Composición verde / amarillo / rojo+negro por característica.",
+    )
+    tipo = st.radio(
+        "Característica",
+        options=["Pisos", "Uso", "Material"],
+        horizontal=True,
+        key="matriz_tipo",
+    )
+    if tipo == "Pisos":
+        mix = semaforo_mix_by(work, "piso_band", PISO_BANDS + ["Sin dato"])
+        ct_tipo = crosstab_etiqueta(work, "piso_band", PISO_BANDS + ["Sin dato"])
+    elif tipo == "Uso":
+        cats = work["uso_g"].value_counts().index.tolist()
+        mix = semaforo_mix_by(work, "uso_g", cats)
+        ct_tipo = crosstab_etiqueta(work, "uso_g", cats)
+    else:
+        cats = work["material_g"].value_counts().index.tolist()
+        mix = semaforo_mix_by(work, "material_g", cats)
+        ct_tipo = crosstab_etiqueta(work, "material_g", cats)
+
+    with st.expander("Matriz etiqueta × tipología (conteos)", expanded=False):
+        st.dataframe(ct_tipo, use_container_width=True)
+
+    if not mix.empty:
+        show_mix = mix.rename(
+            columns={
+                "categoria": "Categoría",
+                "n": "n",
+                "pct_verde": "% verde",
+                "pct_amarillo": "% amarillo",
+                "pct_rojo_negro": "% rojo+negro",
+            }
+        )
+        st.dataframe(show_mix, use_container_width=True, hide_index=True)
+        st_echarts(
+            bar_stacked_pct(
+                f"Composición semáforo por {tipo.lower()}",
+                mix["categoria"].tolist(),
+                [
+                    ("Verde", mix["pct_verde"].tolist(), ETIQUETA_COLORS["VERDE"]),
+                    (
+                        "Amarillo",
+                        mix["pct_amarillo"].tolist(),
+                        ETIQUETA_COLORS["AMARILLO"],
+                    ),
+                    (
+                        "Rojo + negro",
+                        mix["pct_rojo_negro"].tolist(),
+                        ETIQUETA_COLORS["ROJO"],
+                    ),
+                ],
+            ),
+            height="340px",
+            key="matriz_tipo_stack",
+        )
+
+    with st.expander("Perfiles Ext|Sev|Mod|Comp más frecuentes"):
+        prof = risk_profile_top(work, n=15)
+        if prof.empty:
+            st.caption("Sin perfiles.")
+        else:
+            st.dataframe(
+                prof.rename(columns={"perfil": "Perfil", "n": "n", "pct": "%"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.caption("Orden: externo | severo | moderado | componentes.")
 
 
 def _tab_no_estructural(hab: pd.DataFrame):
