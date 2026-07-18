@@ -43,6 +43,15 @@ ESTATUS_CRUCE = {
 CRUZADO_SI = {"coincide_alta", "coincide_media"}
 CRUZADO_REVISAR = {"coincide_geo_solo"}
 
+# Estatus operativo para contactar al ciudadano por número de caso
+ESTATUS_CONTACTO = {
+    "coincide_alta": "Atendido — informar al ciudadano (cruce alto)",
+    "coincide_media": "Atendido — informar al ciudadano (cruce medio)",
+    "coincide_geo_solo": "Por revisar — no informar aún (cruce dudoso)",
+    "solo_1x10": "Pendiente en cola — aún no atendido en Habitable",
+    "no_mapeable": "Pendiente GPS — no se pudo ubicar para cruzar",
+}
+
 HAB_ETIQUETA_DESC = {
     "VERDE": "Habitable — acceso permitido",
     "AMARILLO": "Habitable — acceso restringido",
@@ -50,6 +59,78 @@ HAB_ETIQUETA_DESC = {
     "NEGRO": "Habitable — máximo riesgo (etiqueta negra)",
     "": "Sin inspección Habitable vinculada",
 }
+
+
+def enrich_habitable_cruce(df: pd.DataFrame) -> pd.DataFrame:
+    """Añade columnas explícitas de cruce Habitable, estatus y cola de contacto."""
+    out = df.copy()
+    if "match_cat" in out.columns:
+        cat = out["match_cat"].astype(str)
+        out["cruzado_con_habitable"] = cat.map(
+            lambda c: "Sí"
+            if c in CRUZADO_SI
+            else ("Por revisar" if c in CRUZADO_REVISAR else "No")
+        )
+        out["estatus_cruce"] = cat.map(lambda c: ESTATUS_CRUCE.get(c, c))
+        out["match_cat_desc"] = cat.map(lambda c: MATCH_CAT_DESC.get(c, c))
+        out["estatus_para_contacto"] = cat.map(
+            lambda c: ESTATUS_CONTACTO.get(c, c)
+        )
+        out["en_cola_pendiente"] = cat.isin(["solo_1x10", "no_mapeable"])
+        out["atendido_segun_cruce"] = cat.isin(list(CRUZADO_SI))
+        out["requiere_revision_antes_de_informar"] = cat.isin(
+            list(CRUZADO_REVISAR) | {"no_mapeable"}
+        )
+    else:
+        out["cruzado_con_habitable"] = "No"
+        out["estatus_cruce"] = "Sin dato de cruce"
+        out["match_cat_desc"] = ""
+        out["estatus_para_contacto"] = "Sin dato"
+        out["en_cola_pendiente"] = True
+        out["atendido_segun_cruce"] = False
+        out["requiere_revision_antes_de_informar"] = True
+
+    if "hab_etiqueta" in out.columns:
+        eti = (
+            out["hab_etiqueta"]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+        out["estatus_inspeccion_habitable"] = eti
+        out["estatus_inspeccion_habitable_desc"] = eti.map(
+            lambda e: HAB_ETIQUETA_DESC.get(
+                e, f"Habitable — {e}" if e else HAB_ETIQUETA_DESC[""]
+            )
+        )
+        if "match_cat" in out.columns:
+            sin = ~out["match_cat"].isin(CRUZADO_SI | CRUZADO_REVISAR)
+            out.loc[sin, "estatus_inspeccion_habitable"] = ""
+            out.loc[sin, "estatus_inspeccion_habitable_desc"] = (
+                "Sin inspección Habitable vinculada"
+            )
+    else:
+        out["estatus_inspeccion_habitable"] = ""
+        out["estatus_inspeccion_habitable_desc"] = "Sin dato Habitable"
+
+    if "hab_nombre" in out.columns:
+        out["edificacion_habitable"] = out["hab_nombre"].fillna("").astype(str)
+
+    # Una fila = un código de caso (no se colapsa el edificio)
+    if "codigo_caso" in out.columns:
+        out["fila_es_caso_individual"] = True
+    if "n_reportes" in out.columns:
+        out["casos_cerca_misma_ubicacion"] = out["n_reportes"]
+        out["nota_ubicacion"] = out["n_reportes"].map(
+            lambda n: (
+                f"Hay {int(n)} reportes 1×10 cerca (≤20 m); "
+                "cada fila sigue siendo un caso distinto a contactar."
+                if pd.notna(n) and int(n) > 1
+                else "Caso único en su ubicación."
+            )
+        )
+    return out
 
 
 def resumen_depuracion(sol: pd.DataFrame, summary: dict | None = None) -> dict:
@@ -169,6 +250,7 @@ def apply_export_filters(
     calidad_geo: list[str] | None = None,
     solo_representantes: bool = False,
     solo_requiere_revision: bool = False,
+    solo_cola_pendiente: bool = False,
 ) -> pd.DataFrame:
     """Filtra el universo 1×10 antes de armar el Excel."""
     out = sol
@@ -199,6 +281,8 @@ def apply_export_filters(
         out = out[out["calidad_geo"].isin(calidad_geo)]
     if solo_representantes and "es_representante" in out.columns:
         out = out[out["es_representante"]]
+    if solo_cola_pendiente and "match_cat" in out.columns:
+        out = out[out["match_cat"].isin(["solo_1x10", "no_mapeable"])]
     if solo_requiere_revision:
         if "mapeable" in out.columns and "mapa_ok" in out.columns:
             gps = (~out["mapeable"]) | (out["mapeable"] & ~out["mapa_ok"])
@@ -261,6 +345,11 @@ def frame_export_depurado(sol: pd.DataFrame) -> pd.DataFrame:
             "calidad_geo",
             "calidad_geo_desc",
             "requiere_revision_gps",
+            "fila_es_caso_individual",
+            "estatus_para_contacto",
+            "en_cola_pendiente",
+            "atendido_segun_cruce",
+            "requiere_revision_antes_de_informar",
             "cruzado_con_habitable",
             "estatus_cruce",
             "match_cat",
@@ -274,6 +363,8 @@ def frame_export_depurado(sol: pd.DataFrame) -> pd.DataFrame:
             "estatus_inspeccion_habitable",
             "estatus_inspeccion_habitable_desc",
             "hab_etiqueta",
+            "casos_cerca_misma_ubicacion",
+            "nota_ubicacion",
             "dedup_key",
             "n_reportes",
             "codigos_grupo",
@@ -337,6 +428,54 @@ def excel_bytes_depurado(sol: pd.DataFrame) -> bytes:
                 )
             pd.DataFrame(cruce_rows).to_excel(
                 writer, sheet_name="cruce_habitable", index=False
+            )
+        # Cola operativa: una fila por caso pendiente de contactar / informar
+        enriched = frame_export_depurado(sol)
+        if "en_cola_pendiente" in enriched.columns:
+            cola = enriched[enriched["en_cola_pendiente"]]
+            cols_cola = [
+                c
+                for c in [
+                    "codigo_caso",
+                    "denunciante",
+                    "telefono",
+                    "direccion",
+                    "estado_n",
+                    "municipio_n",
+                    "parroquia_n",
+                    "estatus_para_contacto",
+                    "en_cola_pendiente",
+                    "cruzado_con_habitable",
+                    "estatus_cruce",
+                    "estatus_inspeccion_habitable",
+                    "edificacion_habitable",
+                    "nota_ubicacion",
+                ]
+                if c in cola.columns
+            ]
+            cola[cols_cola].to_excel(
+                writer, sheet_name="cola_pendiente_casos", index=False
+            )
+        if "atendido_segun_cruce" in enriched.columns:
+            aten = enriched[enriched["atendido_segun_cruce"]]
+            cols_a = [
+                c
+                for c in [
+                    "codigo_caso",
+                    "denunciante",
+                    "telefono",
+                    "direccion",
+                    "estatus_para_contacto",
+                    "estatus_inspeccion_habitable",
+                    "estatus_inspeccion_habitable_desc",
+                    "edificacion_habitable",
+                    "match_dist_m",
+                    "nota_ubicacion",
+                ]
+                if c in aten.columns
+            ]
+            aten[cols_a].to_excel(
+                writer, sheet_name="casos_atendidos_informar", index=False
             )
         if r.get("hab_etiqueta_cruzados"):
             pd.DataFrame(

@@ -163,11 +163,18 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
                 )
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    st.markdown("#### Descargar Excel depurado (con filtros)")
+    st.markdown("#### Descargar Excel depurado (caso a caso)")
     st.caption(
-        "Filtra por territorio, estatus de cruce Habitable o semáforo de "
-        "inspección. El archivo incluye columnas `cruzado_con_habitable`, "
-        "`estatus_cruce` y `estatus_inspeccion_habitable`."
+        "Una fila = un **código de caso** (vecino a contactar). "
+        "No se agrupa por edificio: si varios reportes caen en la misma "
+        "ubicación, cada caso sigue saliendo aparte. "
+        "Columnas clave: `estatus_para_contacto`, `en_cola_pendiente`, "
+        "`cruzado_con_habitable`, `estatus_inspeccion_habitable`."
+    )
+    st.info(
+        "La unificación a 20 m solo sirve para mapa/estadísticas. "
+        "Para la cola de 1×10 (informar atendido / pendiente) usa siempre "
+        "esta descarga caso a caso."
     )
 
     estados_all = sorted(sol["estado_n"].dropna().unique().tolist()) if "estado_n" in sol.columns else []
@@ -241,18 +248,26 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
             key="dep_cal",
         )
 
-    t1, t2 = st.columns(2)
+    t1, t2, t3 = st.columns(3)
     with t1:
-        solo_rep = st.checkbox(
-            "Solo ubicaciones unificadas (representantes)",
+        solo_cola = st.checkbox(
+            "Solo cola pendiente (no cruzados)",
             value=False,
-            key="dep_rep",
+            key="dep_cola",
+            help="Casos aún no atendidos según el cruce — para Habitable / contacto.",
         )
     with t2:
         solo_rev = st.checkbox(
-            "Solo pendientes de revisión (GPS o cruce)",
+            "Solo pendientes de revisión (GPS o cruce dudoso)",
             value=False,
             key="dep_rev",
+        )
+    with t3:
+        solo_rep = st.checkbox(
+            "Solo representantes (mapa) — no usar para contacto",
+            value=False,
+            key="dep_rep",
+            help="Oculta vecinos del mismo cluster. No recomendado para informar caso a caso.",
         )
 
     filtrado = apply_export_filters(
@@ -265,11 +280,23 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
         calidad_geo=filt_cal or None,
         solo_representantes=solo_rep,
         solo_requiere_revision=solo_rev,
+        solo_cola_pendiente=solo_cola,
+    )
+    n_casos = (
+        filtrado["codigo_caso"].nunique()
+        if "codigo_caso" in filtrado.columns
+        else len(filtrado)
     )
     st.info(
-        f"Filas a descargar: **{fmt_num(len(filtrado))}** "
-        f"(de {fmt_num(len(sol))} en el universo completo)."
+        f"Filas / casos a descargar: **{fmt_num(len(filtrado))}** "
+        f"({fmt_num(n_casos)} códigos distintos) "
+        f"de {fmt_num(len(sol))} en el universo completo."
     )
+    if solo_rep:
+        st.warning(
+            "Tienes activo «solo representantes»: se ocultan casos vecinos "
+            "del mismo punto. Para contactar por número de caso, desactívalo."
+        )
 
     try:
         if filtrado.empty:
@@ -277,17 +304,18 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
         else:
             xlsx = excel_bytes_depurado(filtrado)
             st.download_button(
-                "Descargar 1×10 depurado (Excel)",
+                "Descargar 1×10 caso a caso (Excel)",
                 data=xlsx,
-                file_name="solicitudes_1x10_depurado.xlsx",
+                file_name="solicitudes_1x10_casos_contacto.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True,
-                help="Original + depuradas + cruce Habitable + estatus de inspección.",
+                help="Una fila por código de caso + cruce Habitable + cola de contacto.",
             )
             st.caption(
-                "Hojas: `1x10_depurado` · `resumen_depuracion` · `calidad_geo` · "
-                "`cruce_habitable` · `estatus_habitable`."
+                "Hojas: `1x10_depurado` · `cola_pendiente_casos` · "
+                "`casos_atendidos_informar` · `cruce_habitable` · "
+                "`estatus_habitable` · resumen."
             )
     except Exception as exc:  # noqa: BLE001
         st.warning(f"No se pudo generar el Excel depurado: {exc}")
@@ -435,38 +463,47 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
         key="x10_parroq",
     )
 
-    st.markdown("#### Pendientes de atender")
+    st.markdown("#### Pendientes de atender (cola por código de caso)")
+    st.caption(
+        "Listado **caso a caso** (no unificado). Sirve para contactar por "
+        "`codigo_caso` e indicar a Habitable qué falta por revisar."
+    )
     estados = st.multiselect(
         "Filtrar pendientes por estado",
-        options=sorted(work["estado_n"].unique()),
+        options=sorted(base["estado_n"].unique()),
         default=["CARACAS", "LA GUAIRA"]
-        if {"CARACAS", "LA GUAIRA"} <= set(work["estado_n"].unique())
+        if {"CARACAS", "LA GUAIRA"} <= set(base["estado_n"].unique())
         else [],
         key="pend_est",
     )
-    pend = work[work["match_cat"] == "solo_1x10"]
+    pend = base[base["match_cat"] == "solo_1x10"].copy()
     if estados:
         pend = pend[pend["estado_n"].isin(estados)]
     show_cols = [
         c
         for c in [
-            "n_reportes",
             "codigo_caso",
-            "codigos_grupo",
+            "direccion",
             "estado_n",
             "municipio_n",
             "parroquia_n",
-            "direccion",
+            "n_reportes",
+            "codigos_grupo",
             "lat",
             "lng",
+            "match_cat",
         ]
         if c in pend.columns
     ]
-    st.dataframe(pend[show_cols].head(500), use_container_width=True)
+    st.dataframe(pend[show_cols].head(500), use_container_width=True, hide_index=True)
+    st.caption(
+        f"Mostrando hasta 500 de {fmt_num(len(pend))} casos pendientes "
+        f"(una fila por código)."
+    )
     st.download_button(
-        "Descargar pendientes (CSV)",
+        "Descargar cola pendiente caso a caso (CSV)",
         data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
-        file_name="pendientes_1x10_unificados.csv",
+        file_name="cola_pendiente_1x10_casos.csv",
         mime="text/csv",
     )
 
