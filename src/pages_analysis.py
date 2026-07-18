@@ -333,25 +333,8 @@ def _tab_explorar_pygwalker(hab: pd.DataFrame):
         st.warning("Sin filas en el filtro actual.")
         return
 
-    # Tope para no saturar memoria/HTML en instancias pequeñas
-    max_rows = st.slider(
-        "Máx. filas en el explorador",
-        min_value=500,
-        max_value=min(len(explore), 10000),
-        value=min(len(explore), 5000),
-        step=500,
-        help="Si el navegador va lento, baja este tope o acota el territorio.",
-        key="explore_max_rows",
-    )
-    if len(explore) > max_rows:
-        explore = explore.sample(max_rows, random_state=42)
-        st.caption(
-            f"Muestra aleatoria de {fmt_num(max_rows)} filas "
-            f"(universo filtrado: {fmt_num(len(base))})."
-        )
-
     st.info(
-        f"Vista inicial · {fmt_num(len(explore))} inspecciones · "
+        f"Universo completo del filtro · {fmt_num(len(explore))} inspecciones · "
         f"{len(explore.columns)} campos. "
         "Sugerencia: `etiqueta` o `semaforo_grupo` en color; "
         "`estado` / `num_pisos` en ejes."
