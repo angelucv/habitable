@@ -36,21 +36,42 @@ def load_config() -> dict:
 
 def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
     df = pd.read_excel(path, dtype=str)
-    df = df.rename(
-        columns={
-            "CODIGO CASO": "codigo_caso",
-            "CEDULA": "cedula",
-            "DENUNCIANTE": "denunciante",
-            "TELEFONO": "telefono",
-            "ESTADO": "estado",
-            "MUNICIPIO": "municipio",
-            "PARROQ": "parroquia",
-            "LATITUD": "lat_raw",
-            "LONGITUD": "lng_raw",
-            "DIRECCION": "direccion",
-            "DESCRIP": "descripcion",
-        }
+    # Normaliza encabezados (espacios / puntos) antes del rename
+    df.columns = (
+        pd.Index(df.columns)
+        .map(lambda c: str(c).strip().upper().replace("  ", " "))
     )
+    rename_map = {
+        "CODIGO CASO": "codigo_caso",
+        "CÓDIGO CASO": "codigo_caso",
+        "CEDULA": "cedula",
+        "CÉDULA": "cedula",
+        "DENUNCIANTE": "denunciante",
+        "TELEFONO": "telefono",
+        "TELÉFONO": "telefono",
+        "TELEFONO ALT.": "telefono_alt",
+        "TELEFONO ALT": "telefono_alt",
+        "TELÉFONO ALT.": "telefono_alt",
+        "TELÉFONO ALT": "telefono_alt",
+        "ESTADO": "estado",
+        "MUNICIPIO": "municipio",
+        "PARROQ": "parroquia",
+        "PARROQUIA": "parroquia",
+        "LATITUD": "lat_raw",
+        "LONGITUD": "lng_raw",
+        "DIRECCION": "direccion",
+        "DIRECCIÓN": "direccion",
+        "DESCRIP": "descripcion",
+        "DESCRIPCION": "descripcion",
+        "DESCRIPCIÓN": "descripcion",
+    }
+    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+    # Contacto: no perder identidad del caso ni del denunciante
+    for col in ("codigo_caso", "cedula", "denunciante", "telefono", "telefono_alt"):
+        if col not in df.columns:
+            df[col] = ""
+        else:
+            df[col] = df[col].fillna("").astype(str).str.strip()
     df["lat"] = df["lat_raw"].map(lambda v: parse_coord(v, "lat"))
     df["lng"] = df["lng_raw"].map(lambda v: parse_coord(v, "lng"))
     df["nombre_n"] = df["direccion"].map(normalize_name)
@@ -284,6 +305,10 @@ def run_pipeline(
     hab_path = OUT / "inspecciones.parquet"
     sum_path = OUT / "summary.json"
 
+    # Contacto primero: número de caso + denunciante (operación 1×10)
+    for col in ("codigo_caso", "cedula", "denunciante", "telefono", "telefono_alt"):
+        if col not in sol.columns:
+            sol[col] = ""
     sol_cols = [
         c
         for c in [
@@ -291,6 +316,7 @@ def run_pipeline(
             "cedula",
             "denunciante",
             "telefono",
+            "telefono_alt",
             "estado",
             "estado_n",
             "municipio",

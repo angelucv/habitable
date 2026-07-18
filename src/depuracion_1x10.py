@@ -273,6 +273,7 @@ def frame_export_depurado(sol: pd.DataFrame) -> pd.DataFrame:
             "cedula",
             "denunciante",
             "telefono",
+            "telefono_alt",
             "estado",
             "municipio",
             "parroquia",
@@ -388,8 +389,10 @@ def excel_bytes_depurado(sol: pd.DataFrame) -> bytes:
                 c
                 for c in [
                     "codigo_caso",
+                    "cedula",
                     "denunciante",
                     "telefono",
+                    "telefono_alt",
                     "direccion",
                     "estado_n",
                     "municipio_n",
@@ -413,8 +416,10 @@ def excel_bytes_depurado(sol: pd.DataFrame) -> bytes:
                 c
                 for c in [
                     "codigo_caso",
+                    "cedula",
                     "denunciante",
                     "telefono",
+                    "telefono_alt",
                     "direccion",
                     "estatus_para_contacto",
                     "estatus_inspeccion_habitable",

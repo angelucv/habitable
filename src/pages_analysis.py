@@ -165,12 +165,22 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
 
     st.markdown("#### Descargar Excel depurado (caso a caso)")
     st.caption(
-        "Una fila = un **código de caso** (vecino a contactar). "
+        "Una fila = un **código de caso** (vecino a contactar), con "
+        "`codigo_caso`, `denunciante`, `telefono` y cédula. "
         "No se agrupa por edificio: si varios reportes caen en la misma "
         "ubicación, cada caso sigue saliendo aparte. "
-        "Columnas clave: `estatus_para_contacto`, `en_cola_pendiente`, "
+        "También: `estatus_para_contacto`, `en_cola_pendiente`, "
         "`cruzado_con_habitable`, `estatus_inspeccion_habitable`."
     )
+    _contact_cols = [
+        c for c in ("codigo_caso", "denunciante", "telefono") if c in sol.columns
+    ]
+    if len(_contact_cols) < 3:
+        st.warning(
+            "Faltan columnas de contacto en los datos cargados "
+            "(denunciante / teléfono). Regenera el parquet desde el Excel 1×10 "
+            "completo para no perder identidad del caso."
+        )
     st.info(
         "La unificación a 20 m solo sirve para mapa/estadísticas. "
         "Para la cola de 1×10 (informar atendido / pendiente) usa siempre "
@@ -483,6 +493,10 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
         c
         for c in [
             "codigo_caso",
+            "cedula",
+            "denunciante",
+            "telefono",
+            "telefono_alt",
             "direccion",
             "estado_n",
             "municipio_n",
