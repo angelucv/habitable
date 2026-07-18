@@ -291,10 +291,10 @@ def page_habitable(hab: pd.DataFrame, summary: dict):
     sec = render_section_tabs(
         [
             ("matriz", "Matriz semáforo"),
-            ("explorar", "Explorar / reportería"),
             ("ne", "No estructurales"),
             ("mod", "Estructurales moderados"),
             ("sev", "Severos y externos"),
+            ("explorar", "Explorar / reportería"),
         ],
         state_key="hab_dano",
         heading="Secciones de análisis Habitable",
