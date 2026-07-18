@@ -1,0 +1,15 @@
+# Blueprint opcional para Render (Web Service)
+# En el dashboard de Render también puedes crear el servicio a mano.
+
+services:
+  - type: web
+    name: bi-habitable-cruce
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      # Contraseña de acceso al BI (Streamlit secrets también sirve)
+      - key: BI_PASSWORD
+        sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"

@@ -1,0 +1,15 @@
+[server]
+headless = true
+# En Render el puerto lo fija la variable PORT (ver Dockerfile).
+# En local Streamlit usa 8501 por defecto si no se indica --server.port.
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1F4E79"
+backgroundColor = "#F4F6F9"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1A2332"
+font = "sans serif"

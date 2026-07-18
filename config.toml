@@ -1,0 +1,39 @@
+# =============================================================================
+# Configuración del BI Cruce 1×10 × Habitable
+# -----------------------------------------------------------------------------
+# En local: puedes apuntar a rutas absolutas de Excel.
+# En Render / producción: deja vacías las rutas de sources y usa la carga
+# por pantalla (archivos quedan en data/uploads/).
+# =============================================================================
+
+[sources]
+# Rutas opcionales a Excel locales (desarrollo). En producción suelen ir vacías.
+solicitudes_1x10 = ''
+inspecciones_habitable = ''
+habitable_sheet = 'Inspecciones'
+
+[matching]
+# Radio geográfico (metros) para buscar la inspección Habitable más cercana
+# a cada solicitud 1×10.
+radius_m = 50
+# Score fuzzy de nombre (0-100) para clasificar match "alta"
+name_score_high = 85
+# Score para match "media" (o refuerzo a ≤20 m con score ≥50)
+name_score_medium = 70
+# Por debajo de este score, un vecino cercano NO se trata como "dudoso"
+# (se deja como pendiente real: evita falsos como Cattleya↔Orion).
+name_score_geo_min = 40
+# Radio para unificar varios reportes 1×10 del mismo edificio/sitio.
+dedupe_radius_m = 20
+
+[geo]
+# Bounding box aproximado de Venezuela (filtro de calidad de coordenadas)
+lat_min = 0.5
+lat_max = 12.5
+lng_min = -73.5
+lng_max = -59.5
+# Pin hotspot conocido (Libertador): muchas inspecciones distintas
+# comparten el mismo punto → baja confianza cartográfica.
+hotspot_lat = 10.488587
+hotspot_lng = -66.976782
+hotspot_decimals = 6

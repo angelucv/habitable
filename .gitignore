@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+
+# Datos sensibles / generados (no subir Excel ni parquet con PII)
+data/uploads/*
+!data/uploads/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.xlsx
+*.xls
+*.parquet
+
+# Streamlit / secretos
+.streamlit/secrets.toml
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# OS
+Thumbs.db
