@@ -398,8 +398,8 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
     with col1:
         est = work["estado_n"].value_counts().head(8)
         labels = [
-            "Caracas"
-            if x == "CARACAS"
+            "Distrito Capital"
+            if x == "DISTRITO CAPITAL"
             else "La Guaira"
             if x == "LA GUAIRA"
             else x.title()
@@ -481,8 +481,8 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
     estados = st.multiselect(
         "Filtrar pendientes por estado",
         options=sorted(base["estado_n"].unique()),
-        default=["CARACAS", "LA GUAIRA"]
-        if {"CARACAS", "LA GUAIRA"} <= set(base["estado_n"].unique())
+        default=["DISTRITO CAPITAL", "LA GUAIRA"]
+        if {"DISTRITO CAPITAL", "LA GUAIRA"} <= set(base["estado_n"].unique())
         else [],
         key="pend_est",
     )
@@ -526,7 +526,7 @@ def _hab_filters(hab: pd.DataFrame, key_prefix: str) -> pd.DataFrame:
     estados = sorted(hab["estado_n"].dropna().unique().tolist())
     default = [
         e
-        for e in ["DISTRITO CAPITAL", "LA GUAIRA", "MIRANDA", "CARACAS"]
+        for e in ["DISTRITO CAPITAL", "LA GUAIRA", "MIRANDA"]
         if e in estados
     ]
     sel_est = st.multiselect(

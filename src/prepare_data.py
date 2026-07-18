@@ -19,6 +19,7 @@ from geo_utils import (  # noqa: E402
     in_venezuela,
     is_hotspot,
     mapa_ok_flag,
+    normalize_estado,
     normalize_name,
     parse_coord,
     quality_flag,
@@ -75,7 +76,7 @@ def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
     df["lat"] = df["lat_raw"].map(lambda v: parse_coord(v, "lat"))
     df["lng"] = df["lng_raw"].map(lambda v: parse_coord(v, "lng"))
     df["nombre_n"] = df["direccion"].map(normalize_name)
-    df["estado_n"] = df["estado"].fillna("").str.upper().str.strip()
+    df["estado_n"] = df["estado"].map(normalize_estado)
     df["municipio_n"] = df["municipio"].fillna("").str.upper().str.strip()
     df["parroquia_n"] = df["parroquia"].fillna("").str.upper().str.strip()
     df["mapeable"] = df.apply(
@@ -97,7 +98,7 @@ def prepare_habitable(path: str, sheet: str, geo_cfg: dict) -> pd.DataFrame:
     df["lat"] = df["lat"].map(lambda v: parse_coord(v, "lat"))
     df["lng"] = df["lng"].map(lambda v: parse_coord(v, "lng"))
     df["nombre_n"] = df["nombre_edificacion"].map(normalize_name)
-    df["estado_n"] = df["estado"].fillna("").str.upper().str.strip()
+    df["estado_n"] = df["estado"].map(normalize_estado)
     df["municipio_n"] = df["municipio"].fillna("").str.upper().str.strip()
     df["etiqueta_n"] = df["etiqueta"].fillna("SIN").str.upper().str.strip()
     df["uso_n"] = df["uso"].fillna("Sin dato").str.strip()

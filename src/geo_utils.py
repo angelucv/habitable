@@ -1,12 +1,4 @@
-"""
-Utilidades geográficas y de normalización de texto
-=================================================
-
-- ``parse_coord``: repara lat/lng mal formados en Excel.
-- ``in_venezuela`` / ``mapa_ok_flag`` / ``quality_flag``: calidad del pin.
-- ``is_hotspot``: detecta el punto repetido en Libertador (baja confianza).
-- ``normalize_name``: limpia nombres de edificios para fuzzy matching.
-"""
+"""Utilidades de coordenadas y normalización de nombres."""
 
 from __future__ import annotations
 
@@ -51,6 +43,26 @@ def normalize_name(value) -> str:
     s = re.sub(r"[^A-Z0-9\s]", " ", s)
     tokens = [t for t in s.split() if t and t not in _STOP]
     return " ".join(tokens)
+
+
+# Alias → entidad político-territorial oficial (Venezuela).
+# Caracas es la ciudad / capital; no es un estado.
+ESTADO_ALIAS: dict[str, str] = {
+    "CARACAS": "DISTRITO CAPITAL",
+    "DTO CAPITAL": "DISTRITO CAPITAL",
+    "DTO. CAPITAL": "DISTRITO CAPITAL",
+    "CAPITAL": "DISTRITO CAPITAL",
+    "VARGAS": "LA GUAIRA",  # nombre histórico del estado
+}
+
+
+def normalize_estado(value) -> str:
+    """Normaliza etiqueta de estado/entidad federal."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return ""
+    key = strip_accents(str(value)).upper().strip()
+    key = re.sub(r"\s+", " ", key)
+    return ESTADO_ALIAS.get(key, key)
 
 
 def parse_coord(value, kind: str = "lat") -> float:
@@ -198,8 +210,8 @@ def in_state_bbox(lat: float, lng: float, estado_n: str) -> bool:
     """True si no hay bbox del estado o el punto cae dentro."""
     if np.isnan(lat) or np.isnan(lng):
         return False
-    key = (estado_n or "").upper().strip()
-    box = STATE_BBOX.get(key)
+    key = normalize_estado(estado_n)
+    box = STATE_BBOX.get(key) or STATE_BBOX.get((estado_n or "").upper().strip())
     if box is None:
         return True
     la0, la1, lo0, lo1 = box
@@ -210,11 +222,11 @@ def is_open_caribbean(lat: float, lng: float, estado_n: str) -> bool:
     """GPS en mar: al norte de la costa central o umbrales por estado."""
     if np.isnan(lat) or np.isnan(lng):
         return True
-    key = (estado_n or "").upper().strip()
+    key = normalize_estado(estado_n)
     if key in NORTHERN_COAST_OK:
         return False
 
-    # Polilínea costera (Caracas / La Guaira / Miranda costera)
+    # Polilínea costera (Distrito Capital / La Guaira / Miranda costera)
     max_lat = coast_max_lat(lng)
     if max_lat is not None and lat > max_lat + 0.001:
         return True
@@ -222,9 +234,9 @@ def is_open_caribbean(lat: float, lng: float, estado_n: str) -> bool:
     # Norte genérico fuera del corredor costero modelado
     if lat > 10.68:
         return True
-    if key in {"CARACAS", "DISTRITO CAPITAL", "MIRANDA"} and lat > 10.56:
+    if key in {"DISTRITO CAPITAL", "MIRANDA"} and lat > 10.56:
         return True
-    if key in {"LA GUAIRA", "VARGAS"} and lat < 10.45:
+    if key == "LA GUAIRA" and lat < 10.45:
         return True
     return False
 
