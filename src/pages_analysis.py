@@ -1077,3 +1077,242 @@ def _tab_severo_externo(hab: pd.DataFrame):
 
     with st.expander("Lista daños externos altos"):
         st.dataframe(list_view(alto_ext, 500), use_container_width=True)
+
+
+def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
+    """Insumos para cuadrillas: ubicaciones agrupadas + diagnóstico de cruce."""
+    from reportes_inspecciones import (
+        DIAGNOSTICO_CRUCE,
+        excel_bytes_reportes_inspeccion,
+        frame_ubicaciones_inspeccion,
+        resumen_ubicaciones,
+    )
+    from ui_theme import render_kpi_strip, render_section, render_section_tabs
+
+    render_section(
+        "Reportes para inspecciones",
+        "Insumo operativo: una fila = una ubicación a visitar "
+        "(casos 1×10 agrupados). Incluye cantidad de reportes y todos "
+        "los códigos de caso del punto.",
+    )
+
+    sec = render_section_tabs(
+        [
+            ("pendientes", "Pendientes por ubicación"),
+            ("diagnostico", "Por qué cruzan pocos"),
+        ],
+        state_key="rep_insp_sec",
+        heading="Secciones",
+    )
+
+    if sec == "diagnostico":
+        render_kpi_strip(
+            [
+                {
+                    "label": "Cruzados auto",
+                    "value": fmt_num(summary.get("coincide_auto", 0)),
+                    "tone": "success",
+                    "hint": f"{summary.get('pct_ya_insp', 0)}% de mapeables",
+                },
+                {
+                    "label": "Pendientes 1×10",
+                    "value": fmt_num(summary.get("solo_1x10", 0)),
+                    "tone": "warning",
+                    "hint": f"{summary.get('pct_pendiente', 0)}% mapeables",
+                },
+                {
+                    "label": "Dudosos",
+                    "value": fmt_num(summary.get("dudosos", 0)),
+                    "tone": "muted",
+                },
+                {
+                    "label": "Habitable",
+                    "value": fmt_num(summary.get("n_hab", 0)),
+                    "tone": "info",
+                },
+            ]
+        )
+        st.markdown(
+            """
+### Lectura ejecutiva
+
+El cruce automático es relativamente bajo sobre todo por **cobertura y densidad**,
+no solo por umbrales de nombre:
+
+1. Gran parte de las 1×10 mapeables no tienen inspección Habitable a **≤50 m**
+   (la mediana de distancia al Habitable más cercano supera ese radio).
+   En Miranda y el interior la brecha es de **campo**.
+2. Donde sí hay algo cerca, en Distrito Capital / La Guaira el pin suele ser
+   **otro edificio** (densidad urbana).
+3. 1×10 compara la **dirección completa** vs el **nombre corto** de Habitable;
+   el matching revisa **varios vecinos** en el radio y similitud parcial.
+
+**Implicación para inspecciones:** priorizar la cola por **ubicación**
+(esta pestaña), no caso a caso: varios vecinos del mismo punto se visitan
+una sola vez.
+            """.strip()
+        )
+        st.dataframe(
+            pd.DataFrame(DIAGNOSTICO_CRUCE),
+            use_container_width=True,
+            hide_index=True,
+        )
+        return
+
+    # ---- Pendientes por ubicación ----
+    estados_all = (
+        sorted(sol["estado_n"].dropna().unique().tolist())
+        if "estado_n" in sol.columns
+        else []
+    )
+    default_est = [
+        e
+        for e in ["DISTRITO CAPITAL", "LA GUAIRA", "MIRANDA"]
+        if e in estados_all
+    ]
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        filt_est = st.multiselect(
+            "Estado",
+            options=estados_all,
+            default=default_est,
+            key="ri_est",
+        )
+    sol_f = sol
+    if filt_est and "estado_n" in sol.columns:
+        sol_f = sol[sol["estado_n"].isin(filt_est)]
+    munis = (
+        sorted(sol_f["municipio_n"].dropna().unique().tolist())
+        if "municipio_n" in sol_f.columns
+        else []
+    )
+    with f2:
+        filt_mun = st.multiselect("Municipio", options=munis, default=[], key="ri_mun")
+    sol_p = sol_f
+    if filt_mun and "municipio_n" in sol_p.columns:
+        sol_p = sol_p[sol_p["municipio_n"].isin(filt_mun)]
+    parrs = (
+        sorted(sol_p["parroquia_n"].replace("", pd.NA).dropna().unique().tolist())
+        if "parroquia_n" in sol_p.columns
+        else []
+    )
+    with f3:
+        filt_parr = st.multiselect(
+            "Parroquia", options=parrs, default=[], key="ri_parr"
+        )
+    with f4:
+        min_casos = st.number_input(
+            "Mín. reportes por ubicación",
+            min_value=1,
+            max_value=50,
+            value=1,
+            key="ri_min",
+        )
+        solo_multi = st.checkbox(
+            "Solo ubicaciones con 2+ reportes",
+            value=False,
+            key="ri_multi",
+        )
+
+    min_eff = max(int(min_casos), 2 if solo_multi else 1)
+
+    pend = frame_ubicaciones_inspeccion(
+        sol,
+        solo_pendientes=True,
+        estados=filt_est or None,
+        municipios=filt_mun or None,
+        parroquias=filt_parr or None,
+        min_casos=min_eff,
+    )
+    todos = frame_ubicaciones_inspeccion(
+        sol,
+        solo_pendientes=False,
+        estados=filt_est or None,
+        municipios=filt_mun or None,
+        parroquias=filt_parr or None,
+        min_casos=min_eff,
+    )
+    rp = resumen_ubicaciones(pend)
+
+    render_kpi_strip(
+        [
+            {
+                "label": "Ubicaciones pendientes",
+                "value": fmt_num(rp["n_ubicaciones"]),
+                "tone": "warning",
+                "hint": "Puntos a visitar (agrupados)",
+            },
+            {
+                "label": "Casos 1×10 cubiertos",
+                "value": fmt_num(rp["n_casos"]),
+                "tone": "info",
+                "hint": "Suma de reportes en esas ubicaciones",
+            },
+            {
+                "label": "Con varios reportes",
+                "value": fmt_num(rp["n_multi"]),
+                "tone": "muted",
+            },
+            {
+                "label": "Máx. en un punto",
+                "value": fmt_num(rp["max_casos"]),
+                "tone": "flag",
+            },
+        ]
+    )
+
+    st.caption(
+        "Columnas clave: **cantidad_casos** (cuántas veces se reportó el punto) "
+        "y **codigos_casos** (todos los números de caso del grupo, separados por `|`). "
+        "No se repite una fila por vecino: la cuadrilla ve el punto una vez."
+    )
+
+    show_cols = [
+        c
+        for c in [
+            "prioridad_inspeccion",
+            "cantidad_casos",
+            "codigos_casos",
+            "direccion",
+            "estado_n",
+            "municipio_n",
+            "parroquia_n",
+            "lat",
+            "lng",
+            "estatus_cruce",
+            "calidad_geo",
+        ]
+        if c in pend.columns
+    ]
+    st.dataframe(
+        pend[show_cols].head(800),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(
+        f"Mostrando hasta 800 de {fmt_num(len(pend))} ubicaciones pendientes."
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.download_button(
+            "Descargar pendientes por ubicación (CSV)",
+            data=pend.to_csv(index=False).encode("utf-8-sig"),
+            file_name="pendientes_inspeccion_por_ubicacion.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="dl_ri_csv",
+        )
+    with c2:
+        xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
+        st.download_button(
+            "Descargar Excel insumos inspecciones",
+            data=xlsx,
+            file_name="reportes_inspecciones_por_ubicacion.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            type="primary",
+            use_container_width=True,
+            key="dl_ri_xlsx",
+        )

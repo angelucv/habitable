@@ -1,32 +1,11 @@
 """
-BI Cruce Inspecciones — Habitable × 1×10
-========================================
-
-Punto de entrada de Streamlit.
-
-Qué hace este archivo
----------------------
-- Aplica el tema ejecutivo (colores, tipografía, pestañas).
-- Opcionalmente exige contraseña (variable BI_PASSWORD o secrets).
-- Permite cargar Excel 1×10 y Habitable y regenerar el cruce.
-- Ofrece tres vistas: Mapa operativo · Análisis 1×10 · Análisis Habitable.
-
-Ejecución local
----------------
-    streamlit run app.py
-
-Producción (Render)
--------------------
-El Dockerfile arranca este mismo comando escuchando en $PORT.
-
-Colaboradores: ver DOCUMENTACION.md en la raíz del repositorio.
+BI local F0 — Cruce 1×10 × Habitable
+Ejecutar: streamlit run app.py
 """
 
 from __future__ import annotations
 
-import gc
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -34,16 +13,18 @@ import pandas as pd
 import streamlit as st
 from streamlit_echarts import st_echarts
 
-# Raíz del proyecto y carpeta de datos ya procesados (parquet)
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 DATA = ROOT / "data" / "processed"
 
 from charts_echarts import bar_vertical  # noqa: E402
-from data_ingest import data_origin_caption, render_upload_panel  # noqa: E402
+from data_ingest import render_upload_panel  # noqa: E402
 from map_robust import render_map_ui  # noqa: E402
-from pages_analysis import page_1x10, page_habitable  # noqa: E402
-from runtime_limits import is_low_memory  # noqa: E402
+from pages_analysis import (  # noqa: E402
+    page_1x10,
+    page_habitable,
+    page_reportes_inspecciones,
+)
 from ui_theme import (  # noqa: E402
     inject_executive_css,
     render_hero,
@@ -51,72 +32,16 @@ from ui_theme import (  # noqa: E402
     render_section,
 )
 
-# Texto libre pesado: no hace falta en el BI en memoria
-_DROP_HEAVY = {"observaciones"}
-
-
-def check_password() -> bool:
-    """
-    Control de acceso simple para producción colaborativa.
-
-    Orden de prioridad de la clave:
-    1) Variable de entorno BI_PASSWORD (recomendada en Render)
-    2) st.secrets["auth"]["password"] (archivo secrets.toml local)
-
-    Si no hay clave configurada, el tablero queda abierto
-    (útil en desarrollo local).
-    """
-    expected = os.environ.get("BI_PASSWORD", "").strip()
-    if not expected:
-        try:
-            expected = str(st.secrets.get("auth", {}).get("password", "")).strip()
-        except Exception:
-            expected = ""
-
-    if not expected:
-        return True  # Sin clave → modo abierto (solo desarrollo)
-
-    if st.session_state.get("bi_auth_ok"):
-        return True
-
-    st.markdown("### Acceso al tablero")
-    st.caption("BI Cruce Habitable × 1×10 — uso restringido al equipo autorizado.")
-    pwd = st.text_input("Contraseña", type="password", key="bi_pwd_input")
-    if st.button("Entrar", type="primary"):
-        if pwd == expected:
-            st.session_state["bi_auth_ok"] = True
-            st.rerun()
-        st.error("Contraseña incorrecta.")
-    return False
-
 
 @st.cache_data(show_spinner="Cargando datos procesados…")
 def load_data():
-    """Lee parquet + summary generados por prepare_data / carga UI."""
-    sol_path = DATA / "solicitudes.parquet"
-    hab_path = DATA / "inspecciones.parquet"
-    if is_low_memory():
-        try:
-            import pyarrow.parquet as pq
-
-            def _read(path: Path) -> pd.DataFrame:
-                names = [n for n in pq.read_schema(path).names if n not in _DROP_HEAVY]
-                return pd.read_parquet(path, columns=names)
-
-            sol = _read(sol_path)
-            hab = _read(hab_path)
-        except Exception:  # noqa: BLE001
-            sol = pd.read_parquet(sol_path)
-            hab = pd.read_parquet(hab_path)
-    else:
-        sol = pd.read_parquet(sol_path)
-        hab = pd.read_parquet(hab_path)
+    sol = pd.read_parquet(DATA / "solicitudes.parquet")
+    hab = pd.read_parquet(DATA / "inspecciones.parquet")
     summary = json.loads((DATA / "summary.json").read_text(encoding="utf-8"))
     return sol, hab, summary
 
 
 def ensure_data_ready() -> bool:
-    """True si ya existe un cruce procesado listo para pintar el BI."""
     needed = [
         DATA / "solicitudes.parquet",
         DATA / "inspecciones.parquet",
@@ -126,14 +51,12 @@ def ensure_data_ready() -> bool:
 
 
 def filter_estado(df: pd.DataFrame, estados: list[str], col: str = "estado_n"):
-    """Filtra por lista de estados; lista vacía = sin filtro (nacional)."""
     if not estados:
         return df
     return df[df[col].isin(estados)]
 
 
 def fmt_num(n: float | int) -> str:
-    """Formato numérico es-VE (punto de miles)."""
     return f"{int(n):,}".replace(",", ".")
 
 
@@ -316,13 +239,13 @@ def render_main_tabs() -> str:
             ("mapa", "Mapa operativo"),
             ("x10", "Análisis 1×10"),
             ("hab", "Análisis Habitable"),
+            ("reportes", "Reportes inspecciones"),
         ],
         state_key="vista",
         heading="Pestañas del tablero",
     )
 
 def main():
-    """Orquesta autenticación, carga de datos y las tres vistas del BI."""
     st.set_page_config(
         page_title="BI Cruce Inspecciones",
         page_icon="▣",
@@ -331,14 +254,10 @@ def main():
     )
     inject_executive_css()
 
-    # Puerta de acceso (producción). En local sin BI_PASSWORD no pide clave.
-    if not check_password():
-        st.stop()
-
     if not ensure_data_ready():
         st.warning(
-            "Aún no hay datos procesados. Abre «Actualizar datos» abajo, "
-            "carga los Excel y pulsa **Sustituir cruce**."
+            "Aún no hay datos procesados. Carga los Excel abajo y pulsa "
+            "**Procesar cruce**."
         )
 
     render_hero(
@@ -348,28 +267,15 @@ def main():
         kicker="Comisión Presidencial · Evaluación de Habitabilidad",
     )
 
-    if is_low_memory():
-        st.caption(
-            "Servicio en modo bajo consumo de memoria · mapa con tope de marcadores."
-        )
-
-    # Precarga lista → panel colapsado; sin datos → abierto para cargar
-    with st.expander(
-        "Actualizar datos (sustituye la precarga)",
-        expanded=not ensure_data_ready(),
-    ):
+    with st.expander("Cargar / actualizar archivos fuente", expanded=not ensure_data_ready()):
         render_upload_panel()
 
     if not ensure_data_ready():
         st.stop()
 
     sol, hab, summary = load_data()
-    gc.collect()
 
     with st.sidebar:
-        origen = data_origin_caption()
-        if origen:
-            st.caption(origen)
         st.markdown("### Panorama nacional")
         st.markdown(
             f"""
@@ -423,12 +329,13 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # Navegación principal (Mapa / 1×10 / Habitable)
     vista = render_main_tabs()
     if vista == "mapa":
         page_mapa(sol, hab, summary)
     elif vista == "x10":
         page_1x10(sol, summary)
+    elif vista == "reportes":
+        page_reportes_inspecciones(sol, summary)
     else:
         page_habitable(hab, summary)
 

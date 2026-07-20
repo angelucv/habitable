@@ -1,0 +1,131 @@
+{
+  "radius_m": 50,
+  "n_1x10": 33251,
+  "n_1x10_map": 30824,
+  "pct_map": 92.7,
+  "n_hab": 9865,
+  "n_hab_alta": 9471,
+  "n_hab_hot": 368,
+  "cats": {
+    "solo_1x10": 23564,
+    "coincide_geo_solo": 5426,
+    "coincide_alta": 1190,
+    "coincide_media": 644
+  },
+  "pct_solo": 76.4,
+  "pct_alta": 3.9,
+  "pct_media": 2.1,
+  "pct_geo": 17.6,
+  "coincide_auto": 1834,
+  "layers": {
+    "a_1x10": 30824,
+    "b_hab": 9471,
+    "c_coin": 1834,
+    "d_solo": 23564,
+    "e_dudosos": 5426
+  },
+  "x1_estado": {
+    "CARACAS": 13848,
+    "LA GUAIRA": 5732,
+    "MIRANDA": 4792,
+    "CARABOBO": 2374,
+    "ARAGUA": 2149,
+    "YARACUY": 1619,
+    "LARA": 756,
+    "GUARICO": 375
+  },
+  "x1_parroq": {
+    "SUCRE": 2885,
+    "CARABALLEDA": 1639,
+    "CATIA LA MAR": 1186,
+    "URIMARE": 1133,
+    "SAN JUAN": 1088,
+    "LA PASTORA": 890,
+    "ANTIMANO": 835,
+    "EL RECREO": 775,
+    "GUARENAS": 760,
+    "LA CANDELARIA": 704
+  },
+  "x1_cruce_kpi": {
+    "solicitudes": 33251,
+    "mapeables": 30824,
+    "ya_insp": 1834,
+    "pendientes": 23564,
+    "dudosos": 5426,
+    "pct_ya": 5.9,
+    "pct_pend": 76.4
+  },
+  "hab_eti": {
+    "VERDE": 5155,
+    "AMARILLO": 2200,
+    "ROJO": 1786,
+    "NEGRO": 719,
+    "SIN": 3,
+    "TOTAL": 1,
+    "COLAPSADOS": 1
+  },
+  "hab_uso": {
+    "Vivienda Edificio": 3616,
+    "Vivienda": 2345,
+    "Vivienda Casa": 1838,
+    "Casa": 392,
+    "SIN DATO": 297,
+    "Comercio / Oficina": 220,
+    "Educativo": 209,
+    "Vivienda Multifamiliar": 161
+  },
+  "hab_mat": {
+    "Concreto": 5943,
+    "Mampostería formal": 994,
+    "Mampostería informal": 975,
+    "SIN DATO": 347,
+    "Dual (Pórticos y Muros)": 294,
+    "Acero": 282
+  },
+  "hab_est": {
+    "LA GUAIRA": 4068,
+    "DISTRITO CAPITAL": 3768,
+    "MIRANDA": 662,
+    "YARACUY": 419,
+    "ARAGUA": 401,
+    "CARABOBO": 343,
+    "LARA": 46,
+    "TACHIRA": 32
+  },
+  "hab_pisos": {
+    "1": 2520,
+    "2": 1711,
+    "3": 1086,
+    "4-5": 1522,
+    "6-10": 1098,
+    "11-20": 1083,
+    "21+": 108
+  },
+  "hab_kpi": {
+    "total": 9865,
+    "alta_geo": 9471,
+    "rojo_negro": 2505,
+    "pct_rn": 25.4,
+    "verde": 5155
+  },
+  "focus": {
+    "CARACAS": {
+      "solo_1x10": 9133,
+      "coincide_alta": 608,
+      "coincide_media": 268,
+      "coincide_geo_solo": 3382
+    },
+    "LA GUAIRA": {
+      "solo_1x10": 3131,
+      "coincide_alta": 500,
+      "coincide_media": 315,
+      "coincide_geo_solo": 1619
+    },
+    "MIRANDA": {
+      "solo_1x10": 4348,
+      "coincide_alta": 47,
+      "coincide_media": 40,
+      "coincide_geo_solo": 210
+    }
+  }
+}

@@ -1,11 +1,4 @@
-"""
-Deduplicación espacial de solicitudes 1×10
-==========================================
-
-Varias personas pueden reportar el mismo edificio. Este módulo agrupa
-puntos dentro de ``dedupe_radius_m`` (BallTree + BFS) y deja un
-representante con ``n_reportes`` y ``es_representante``.
-"""
+"""Deduplicación espacial de solicitudes 1×10 por radio en metros."""
 
 from __future__ import annotations
 
@@ -108,7 +101,7 @@ def dedupe_solicitudes(
 
     sizes = out.groupby("dedup_key", sort=False)["codigo_caso"].transform("count")
     codes = out.groupby("dedup_key", sort=False)["codigo_caso"].transform(
-        lambda s: " | ".join(s.astype(str).head(8))
+        lambda s: " | ".join(dict.fromkeys(s.astype(str).tolist()))
     )
     out["n_reportes"] = sizes.astype(int)
     out["codigos_grupo"] = codes

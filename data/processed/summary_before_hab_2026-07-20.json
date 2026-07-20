@@ -1,0 +1,16 @@
+{
+  "n_hab": 9865,
+  "n_1x10": 33251,
+  "coincide_auto": 1834,
+  "solo_1x10": 28319,
+  "dudosos": 671,
+  "pct_ya_insp": 5.9,
+  "pct_pendiente": 91.9,
+  "cats": {
+    "solo_1x10": 28319,
+    "coincide_alta": 1190,
+    "coincide_geo_solo": 671,
+    "coincide_media": 644
+  },
+  "source_habitable": null
+}

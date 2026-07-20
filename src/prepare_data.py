@@ -128,6 +128,15 @@ def prepare_habitable(path: str, sheet: str, geo_cfg: dict) -> pd.DataFrame:
     return df
 
 
+def _best_name_score(n1: str, n2: str) -> float:
+    """Compara dirección 1×10 vs nombre Habitable (token_set + partial)."""
+    if not n1 or not n2:
+        return 0.0
+    a = float(fuzz.token_set_ratio(n1, n2))
+    b = float(fuzz.partial_ratio(n1, n2))
+    return max(a, b)
+
+
 def match_solicitudes(
     sol: pd.DataFrame,
     hab: pd.DataFrame,
@@ -135,7 +144,14 @@ def match_solicitudes(
     score_high: int,
     score_medium: int,
     score_geo_min: int = 40,
+    k_neighbors: int = 5,
 ) -> pd.DataFrame:
+    """
+    Matching geo + nombre.
+
+    Usa hasta `k_neighbors` candidatos Habitable dentro del radio y elige
+    el de mejor score de nombre (evita quedarse con un vecino distinto).
+    """
     out = sol.copy()
     out["match_cat"] = "no_mapeable"
     out["match_dist_m"] = np.nan
@@ -154,14 +170,30 @@ def match_solicitudes(
     coords_h = np.radians(hab_m[["lat", "lng"]].to_numpy(dtype=float))
     tree = BallTree(coords_h, metric="haversine")
     coords_s = np.radians(out.loc[mask, ["lat", "lng"]].to_numpy(dtype=float))
-    dist, nn = tree.query(coords_s, k=1)
-    dist_m = dist[:, 0] * R_EARTH
-    nearest = nn[:, 0]
+    k = int(min(max(k_neighbors, 1), len(hab_m)))
+    dist, nn = tree.query(coords_s, k=k)
+    if k == 1:
+        dist = dist.reshape(-1, 1)
+        nn = nn.reshape(-1, 1)
+    dist_m = dist * R_EARTH
 
     cats, dists, scores, hids, hnames, hetiquetas = [], [], [], [], [], []
     for i, row_i in enumerate(idx_sol):
-        d = float(dist_m[i])
-        if d > radius_m:
+        n1 = out.at[row_i, "nombre_n"]
+        best = None  # (score, dist, j)
+        for t in range(k):
+            d = float(dist_m[i, t])
+            if d > radius_m:
+                continue
+            j = int(nn[i, t])
+            n2 = hab_m.at[j, "nombre_n"]
+            score = _best_name_score(n1, n2)
+            if best is None or score > best[0] or (
+                score == best[0] and d < best[1]
+            ):
+                best = (score, d, j)
+
+        if best is None:
             cats.append("solo_1x10")
             dists.append(np.nan)
             scores.append(np.nan)
@@ -169,19 +201,15 @@ def match_solicitudes(
             hnames.append("")
             hetiquetas.append("")
             continue
-        j = int(nearest[i])
-        n1 = out.at[row_i, "nombre_n"]
-        n2 = hab_m.at[j, "nombre_n"]
-        score = float(fuzz.token_set_ratio(n1, n2)) if n1 and n2 else 0.0
+
+        score, d, j = best
         if score >= score_high:
             cat = "coincide_alta"
         elif score >= score_medium or (d <= 20 and score >= 50):
             cat = "coincide_media"
         elif score >= score_geo_min:
-            # Cerca en mapa y nombre medianamente parecido → revisar
             cat = "coincide_geo_solo"
         else:
-            # Vecino distinto (p. ej. Cattleya ↔ Orion): pendiente real
             cat = "solo_1x10"
         cats.append(cat)
         if cat == "solo_1x10" and score < score_geo_min:

@@ -1,0 +1,211 @@
+{
+  "n_1x10": 33251,
+  "n_1x10_mapeable": 30824,
+  "pct_1x10_map": 92.7,
+  "n_hab": 9865,
+  "n_hab_alta": 9471,
+  "n_hab_hotspot": 368,
+  "cats": {
+    "solo_1x10": 24808,
+    "coincide_geo_solo": 4334,
+    "coincide_alta": 1090,
+    "coincide_media": 592
+  },
+  "n_mapeable": 30824,
+  "pct_solo": 80.5,
+  "pct_alta": 3.5,
+  "pct_media": 1.9,
+  "pct_geo": 14.1,
+  "sb_n": 380,
+  "sb_cats": {
+    "coincide_geo_solo": 195,
+    "solo_1x10": 125,
+    "coincide_alta": 44,
+    "coincide_media": 16
+  },
+  "estado_solo": {
+    "CARACAS": 9960,
+    "MIRANDA": 4393,
+    "LA GUAIRA": 3448,
+    "CARABOBO": 2213,
+    "ARAGUA": 1863,
+    "YARACUY": 1511
+  },
+  "estado_alta": {
+    "CARACAS": 550,
+    "LA GUAIRA": 466,
+    "MIRANDA": 44,
+    "ARAGUA": 23,
+    "LARA": 4,
+    "CARABOBO": 3
+  },
+  "samp_alta": [
+    {
+      "caso": "DT-13324771",
+      "dir": "Av MÃ©xico edf roteca frente al liceo AndrÃ©s bello",
+      "hab": "EDIFICIO ROTECA",
+      "m": 20.7,
+      "s": 100,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13389698",
+      "dir": "Panorama a San Rafael, edificio Riga, apartamento 42",
+      "hab": "Edificio riga",
+      "m": 13.7,
+      "s": 100,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13394876",
+      "dir": "calle Roraima, con ave anauco edif portico del avila to",
+      "hab": "Edificio Pórtico del Ávila (Torres C y D",
+      "m": 30.0,
+      "s": 95,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13321691",
+      "dir": "Los Palos Grandes. Edificio Sayonara",
+      "hab": "Edificio Residencias Sayonara ",
+      "m": 7.6,
+      "s": 100,
+      "est": "MIRANDA"
+    },
+    {
+      "caso": "DP-13354215",
+      "dir": "Av. AndrÃ© bello con 3ra.transbersal edificio Atalaya p",
+      "hab": "Atalaya",
+      "m": 33.9,
+      "s": 100,
+      "est": "CARACAS"
+    }
+  ],
+  "samp_media": [
+    {
+      "caso": "DP-13348067",
+      "dir": "Catia la mar ub.playa grande.parroquia urimare las torr",
+      "hab": "Residencia Luisa Cáceres de Arismendi ",
+      "m": 5.4,
+      "s": 78,
+      "est": "LA GUAIRA"
+    },
+    {
+      "caso": "DP-13404349",
+      "dir": "UrbanizaciÃ³n Caribe. Residencias Caribe",
+      "hab": "Residencias Parque del caribe",
+      "m": 18.3,
+      "s": 63,
+      "est": "LA GUAIRA"
+    },
+    {
+      "caso": "DP-13335832",
+      "dir": "Av. Principal de las Fuentes, Edf. Venezuela, piso 3, A",
+      "hab": "VECINO AL VENEZUELA",
+      "m": 13.8,
+      "s": 64,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13411154",
+      "dir": "Ave charaima Residencias Caraballeda Humboltd Caribe to",
+      "hab": "Residencias Caraballeda humbolt",
+      "m": 8.3,
+      "s": 73,
+      "est": "LA GUAIRA"
+    },
+    {
+      "caso": "DP-13416034",
+      "dir": "Residencia la abejita ll Piso 9 apto 9A Boulevard monte",
+      "hab": "Edificio abejita II",
+      "m": 31.1,
+      "s": 82,
+      "est": "LA GUAIRA"
+    }
+  ],
+  "samp_geo": [
+    {
+      "caso": "DT-13441194",
+      "dir": "Tanaguarena Entre Av Cerro Grande y Del Parque ",
+      "hab": "Ilemar",
+      "m": 19.6,
+      "s": 13,
+      "est": "LA GUAIRA"
+    },
+    {
+      "caso": "DT-13313605",
+      "dir": "Av principal de los dos caminos, al lado del centro com",
+      "hab": "Edificio Beti",
+      "m": 33.7,
+      "s": 11,
+      "est": "MIRANDA"
+    },
+    {
+      "caso": "DP-13306294",
+      "dir": "Av sur 1 tablita a candilito edificio opp9 apartamento ",
+      "hab": "Opppe 09",
+      "m": 14.4,
+      "s": 16,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13311526",
+      "dir": "UrbanizaciÃ³n Hugo ChÃ¡vez torre 13 apt 5 piso 1",
+      "hab": "Torre A1",
+      "m": 2.5,
+      "s": 4,
+      "est": "LA GUAIRA"
+    },
+    {
+      "caso": "DC-13393363",
+      "dir": "Avenida principal de los corales, con calle 18A, parroq",
+      "hab": "Res Coral Vista",
+      "m": 27.8,
+      "s": 28,
+      "est": "LA GUAIRA"
+    }
+  ],
+  "samp_solo": [
+    {
+      "caso": "DP-13364590",
+      "dir": "Av. sucre de Catia, calle Maury edificio lombao 405",
+      "hab": "",
+      "m": null,
+      "s": 0,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13425396",
+      "dir": "Avenida el ejÃ©rcito edificio Gloria piso 1 apto 1 Cati",
+      "hab": "",
+      "m": null,
+      "s": 0,
+      "est": "LA GUAIRA"
+    },
+    {
+      "caso": "DP-13409530",
+      "dir": "Avenida Las Aulas Edificio Nelcar apartamento 13 ",
+      "hab": "",
+      "m": null,
+      "s": 0,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13379328",
+      "dir": "Manduca a puente yanes sur 9",
+      "hab": "",
+      "m": null,
+      "s": 0,
+      "est": "CARACAS"
+    },
+    {
+      "caso": "DP-13386913",
+      "dir": "Navarrete a Buena Vista casa 65, Sector Quenepe Maiquet",
+      "hab": "",
+      "m": null,
+      "s": 0,
+      "est": "LA GUAIRA"
+    }
+  ],
+  "radius_m": 40
+}
