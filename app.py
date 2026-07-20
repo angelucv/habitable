@@ -239,7 +239,7 @@ def render_main_tabs() -> str:
             ("mapa", "Mapa operativo"),
             ("x10", "Análisis 1×10"),
             ("hab", "Análisis Habitable"),
-            ("reportes", "Reportes inspecciones"),
+            ("reportes", "1×10 pendientes"),
         ],
         state_key="vista",
         heading="Pestañas del tablero",

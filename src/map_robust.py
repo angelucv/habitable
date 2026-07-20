@@ -1,30 +1,15 @@
-"""
-Mapa operativo del BI (Folium)
-==============================
-
-Construye el mapa con:
-- Varias bases cartográficas (OSM, Carto, Esri, Topo).
-- Capas: Habitable, coincidencias, pendientes, dudosos.
-- FastMarkerCluster para volúmenes grandes.
-- Búsqueda y marcadores destacados.
-
-``render_map_ui`` es lo que llama ``app.page_mapa``.
-"""
+"""Mapa operativo: Folium optimizado (FastMarkerCluster + heatmap)."""
 
 from __future__ import annotations
 
 import html as html_lib
 from typing import Any
 
-import gc
-
 import folium
 from folium.plugins import FastMarkerCluster, HeatMap, MarkerCluster, MeasureControl, MiniMap
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-
-from runtime_limits import heat_max_points, is_low_memory, map_max_markers
 
 # Basemaps públicos (sin API key)
 BASEMAPS: dict[str, tuple[str, str, str]] = {
@@ -314,16 +299,12 @@ def _add_heatmap(
     *,
     name: str,
     show: bool = False,
-    max_points: int | None = None,
 ) -> None:
     if df is None or df.empty:
         return
     data = df.dropna(subset=["lat", "lng"])
     if data.empty:
         return
-    cap = max_points if max_points is not None else heat_max_points()
-    if len(data) > cap:
-        data = data.sample(cap, random_state=42)
     pts = data[["lat", "lng"]].astype(float).values.tolist()
     fg = folium.FeatureGroup(name=name, show=show)
     HeatMap(pts, radius=12, blur=16, max_zoom=15, min_opacity=0.3).add_to(fg)
@@ -353,7 +334,6 @@ def build_map(
     focus_zoom: int = 17,
     highlight: pd.DataFrame | None = None,
     show_minimap: bool = False,
-    show_measure: bool = True,
 ) -> folium.Map:
     if focus_lat is not None and focus_lng is not None:
         lat, lng, zoom = float(focus_lat), float(focus_lng), focus_zoom
@@ -376,13 +356,14 @@ def build_map(
                 continue
             _tile_layer(key, show=False).add_to(fmap)
 
-    # Heatmaps primero (livianos); no exigen la capa de marcadores
-    if show_heat_pend:
+    # Heatmaps primero (baratos); marcadores después
+    if show_heat_pend and show_solo:
         _add_heatmap(fmap, solo, name="Densidad pendientes", show=True)
-    if show_heat_hab:
-        _add_heatmap(fmap, hab_map, name="Densidad inspecciones", show=True)
+    if show_heat_hab and show_hab:
+        _add_heatmap(fmap, hab_map, name="Densidad inspecciones", show=False)
 
-    if show_hab:
+    if show_hab and not (show_heat_hab and max_markers is not None and max_markers <= 0):
+        # Si hay heatmap hab y modo muy agresivo, se puede omitir; normalmente mostramos ambos
         _add_habitable_fast(fmap, hab_map, show=True, max_markers=max_markers)
 
     if show_coin:
@@ -441,13 +422,12 @@ def build_map(
 
     if show_minimap:
         MiniMap(toggle_display=True, position="bottomleft").add_to(fmap)
-    if show_measure:
-        MeasureControl(position="topleft").add_to(fmap)
+    MeasureControl(position="topleft").add_to(fmap)
     folium.LayerControl(collapsed=True, position="topright").add_to(fmap)
     return fmap
 
 
-@st.cache_data(show_spinner="Generando mapa…", ttl=300, max_entries=2)
+@st.cache_data(show_spinner="Generando mapa…", ttl=600)
 def _cached_map_html(
     *,
     coin_bytes: bytes,
@@ -470,7 +450,6 @@ def _cached_map_html(
     focus_lat: float | None,
     focus_lng: float | None,
     show_minimap: bool,
-    show_measure: bool = True,
 ) -> str:
     """Cachea el HTML del mapa para no regenerar con los mismos filtros."""
     from io import BytesIO
@@ -501,12 +480,8 @@ def _cached_map_html(
         focus_lng=focus_lng,
         highlight=read(highlight_bytes) if highlight_bytes else None,
         show_minimap=show_minimap,
-        show_measure=show_measure,
     )
-    html = fmap.get_root().render()
-    del fmap
-    gc.collect()
-    return html
+    return fmap.get_root().render()
 
 
 def _df_to_bytes(df: pd.DataFrame | None, cols: list[str] | None = None) -> bytes:
@@ -556,24 +531,9 @@ def render_map_ui(
     # —— Cartografía ——
     from ui_theme import render_section
 
-    low_mem = is_low_memory()
-    default_cap = map_max_markers()
-
-    if low_mem:
-        st.info(
-            "Modo bajo consumo (Render): el mapa limita marcadores por capa y "
-            "usa densidad para pendientes. Filtra por estado o sube de plan "
-            "si necesitas ver todos los puntos a la vez."
-        )
-
     render_section(
         "Cartografía",
-        "Elige mapa base y vista."
-        + (
-            " En bajo consumo solo se carga la base seleccionada."
-            if low_mem
-            else " Todas las bases quedan en el control de capas del mapa."
-        ),
+        "Elige mapa base y vista. Todas las bases quedan en el control de capas del mapa.",
     )
     c1, c2 = st.columns(2)
     with c1:
@@ -590,13 +550,11 @@ def render_map_ui(
             list(VIEWS.keys()),
             help="Encadre al cargar. La búsqueda puede recentrar el mapa.",
         )
-    if not low_mem:
-        st.caption(
-            "Cambio de base también disponible en el control de capas del mapa "
-            "(arriba a la derecha)."
-        )
+    st.caption(
+        "Cambio de base también disponible en el control de capas del mapa (arriba a la derecha)."
+    )
 
-    # —— Capas de datos ——
+    # —— Capas de datos (mismo esquema del canvas mockup) ——
     render_section(
         "Capas de datos",
         "Dudosos apagados por defecto. Coincidencias = ya atendidas (alta + media).",
@@ -608,21 +566,14 @@ def render_map_ui(
         "Dudosos geo",
         "Todas solicitudes 1×10",
     ]
-    # En bajo consumo: marcadores solo Habitable + coincidencias;
-    # pendientes van por heatmap (mucho menos RAM).
-    default_layers = (
-        ["Habitable", "Coincidencias (alta+media)"]
-        if low_mem
-        else [
+    layers = st.multiselect(
+        "Qué mostrar en el mapa",
+        options=layer_opts,
+        default=[
             "Habitable",
             "Coincidencias (alta+media)",
             "Solo 1×10 (pendientes)",
-        ]
-    )
-    layers = st.multiselect(
-        "Qué mostrar en el mapa (marcadores)",
-        options=layer_opts,
-        default=default_layers,
+        ],
         help="Como en el mockup: Dudosos apagados por defecto. "
         "Coincidencias = ya atendidas (match alta+media).",
     )
@@ -635,8 +586,8 @@ def render_map_ui(
     heat_opts = st.multiselect(
         "Densidad (heatmap)",
         options=["Pendientes", "Inspecciones Habitable"],
-        default=["Pendientes"] if low_mem else [],
-        help="Capa de densidad (liviana). No requiere activar marcadores de la misma capa.",
+        default=[],
+        help="Capa extra de densidad. Los puntos de las capas de arriba se muestran completos.",
     )
     show_heat_pend = "Pendientes" in heat_opts
     show_heat_hab = "Inspecciones Habitable" in heat_opts
@@ -701,30 +652,15 @@ def render_map_ui(
     # —— Extras ——
     with st.expander("Extras del mapa", expanded=False):
         show_minimap = st.checkbox("Mini-mapa", value=False)
-        if low_mem or default_cap is not None:
-            cap_ui = st.number_input(
-                "Máx. marcadores por capa",
-                min_value=200,
-                max_value=8000,
-                value=int(default_cap or 900),
-                step=100,
-                help="Baja este valor si el servicio se reinicia por memoria.",
-            )
-            max_markers = int(cap_ui)
-        else:
-            max_markers = None
-            st.caption(
-                "Sin tope de marcadores. Si el mapa tarda, filtra por estado "
-                "o activa modo bajo consumo (BI_LOW_MEMORY=1)."
-            )
-        show_extra = st.checkbox(
-            "Cargar todos los mapas base en el control de capas",
-            value=not low_mem,
+        st.caption(
+            "El mapa pinta todos los puntos de las capas seleccionadas "
+            "según el filtro territorial. Si tarda, reduce capas o filtra por estado."
         )
-        show_measure = st.checkbox(
-            "Herramienta de medición",
-            value=not low_mem,
-        )
+
+    # Sin tope: todos los puntos del filtro actual
+    max_markers = None
+    # Siempre cargar todas las bases en el LayerControl del mapa
+    show_extra = True
 
     html = _cached_map_html(
         coin_bytes=_df_to_bytes(coin, _SOL_COLS),
@@ -733,7 +669,7 @@ def render_map_ui(
         hab_bytes=_df_to_bytes(hab_map, _HAB_COLS),
         sol_bytes=_df_to_bytes(sol_map if show_1x10 else None, _SOL_COLS),
         highlight_bytes=_df_to_bytes(
-            highlight.head(40) if not highlight.empty else None, _SOL_COLS
+            highlight.head(80) if not highlight.empty else None, _SOL_COLS
         ),
         basemap=basemap,
         view_name=view_name,
@@ -749,19 +685,383 @@ def render_map_ui(
         focus_lat=focus_lat,
         focus_lng=focus_lng,
         show_minimap=show_minimap,
-        show_measure=show_measure,
     )
     components.html(html, height=640, scrolling=False)
-    del html
-    gc.collect()
 
-    cap_note = (
-        f" Tope {max_markers} marcadores/capa."
-        if max_markers
-        else ""
-    )
     st.caption(
         "Leyenda: semáforo Habitable · violeta = atendidas · naranja = pendientes · "
         "gris = dudosos · rojo = búsqueda · control de capas / mapas base arriba a la derecha."
-        + cap_note
+    )
+
+
+# —— Mapa dedicado: 1×10 pendientes por ubicación ——
+
+_PEND_COLS = [
+    "lat",
+    "lng",
+    "direccion",
+    "codigo_caso",
+    "codigos_casos",
+    "codigos_grupo",
+    "n_reportes",
+    "cantidad_casos",
+    "estado_n",
+    "municipio_n",
+    "parroquia_n",
+    "prioridad_inspeccion",
+    "estatus_cruce",
+]
+
+
+def _volumen_casos(row) -> int:
+    for attr in ("cantidad_casos", "n_reportes"):
+        v = getattr(row, attr, None)
+        if v is not None and not (isinstance(v, float) and pd.isna(v)):
+            try:
+                return max(1, int(v))
+            except (TypeError, ValueError):
+                pass
+    return 1
+
+
+def _color_por_volumen(n: int) -> str:
+    """Más reportes → color más intenso (resalta concentraciones)."""
+    if n >= 10:
+        return "#7F1D1D"  # rojo oscuro
+    if n >= 5:
+        return "#DC2626"  # rojo
+    if n >= 2:
+        return "#EA580C"  # naranja fuerte
+    return "#F59E0B"  # ámbar (1 caso)
+
+
+def _radius_por_volumen(n: int) -> int:
+    if n >= 10:
+        return 16
+    if n >= 5:
+        return 12
+    if n >= 2:
+        return 8
+    return 5
+
+
+def _add_heatmap_weighted(
+    fmap: folium.Map,
+    df: pd.DataFrame,
+    *,
+    name: str,
+    show: bool = True,
+    weight_col: str = "cantidad_casos",
+) -> None:
+    """Heatmap ponderado por cantidad de casos en la ubicación."""
+    if df is None or df.empty:
+        return
+    data = df.dropna(subset=["lat", "lng"]).copy()
+    if data.empty:
+        return
+    if weight_col not in data.columns and "n_reportes" in data.columns:
+        weight_col = "n_reportes"
+    if weight_col in data.columns:
+        w = pd.to_numeric(data[weight_col], errors="coerce").fillna(1).clip(lower=1)
+        pts = [
+            [float(la), float(lo), float(ww)]
+            for la, lo, ww in zip(data["lat"], data["lng"], w)
+        ]
+    else:
+        pts = data[["lat", "lng"]].astype(float).values.tolist()
+    fg = folium.FeatureGroup(name=name, show=show)
+    HeatMap(
+        pts,
+        radius=18,
+        blur=22,
+        max_zoom=16,
+        min_opacity=0.35,
+    ).add_to(fg)
+    fg.add_to(fmap)
+
+
+def _add_pendientes_volumen(
+    fmap: folium.Map,
+    df: pd.DataFrame,
+    *,
+    show: bool = True,
+    max_markers: int | None = None,
+) -> int:
+    """Círculos por ubicación: tamaño y color según cantidad de casos."""
+    data, total, truncated = _prepare(df, max_markers)
+    if data is None or data.empty:
+        return 0
+
+    label = f"Pendientes por ubicación · {len(data):,}".replace(",", ".")
+    if truncated:
+        label = f"Pendientes por ubicación · {len(data):,}/{total:,}".replace(",", ".")
+
+    fg = folium.FeatureGroup(name=label, show=show)
+    # Sin cluster: el tamaño/color por volumen debe verse; cluster lo ocultaría
+    for r in data.itertuples(index=False):
+        n = _volumen_casos(r)
+        color = _color_por_volumen(n)
+        radius = _radius_por_volumen(n)
+        codes = getattr(r, "codigos_casos", None) or getattr(r, "codigos_grupo", "")
+        fields = {
+            "Cantidad de casos": n,
+            "Códigos": codes,
+            "Dirección": getattr(r, "direccion", ""),
+            "Estado": getattr(r, "estado_n", ""),
+            "Municipio": getattr(r, "municipio_n", ""),
+            "Prioridad": getattr(r, "prioridad_inspeccion", ""),
+        }
+        popup = _popup_from_dict("1×10 pendiente (ubicación)", fields)
+        folium.CircleMarker(
+            location=[float(r.lat), float(r.lng)],
+            radius=radius,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.82 if n >= 5 else 0.7,
+            weight=2 if n >= 5 else 1,
+            popup=folium.Popup(popup, max_width=360),
+            tooltip=f"{n} caso(s) · {_esc(getattr(r, 'direccion', ''))[:60]}",
+        ).add_to(fg)
+    fg.add_to(fmap)
+    return len(data)
+
+
+def build_pendientes_map(
+    *,
+    ubicaciones: pd.DataFrame,
+    basemap: str,
+    view_name: str,
+    show_puntos: bool,
+    show_heat: bool,
+    show_extra_basemaps: bool,
+    max_markers: int | None = None,
+    focus_lat: float | None = None,
+    focus_lng: float | None = None,
+    highlight: pd.DataFrame | None = None,
+    show_minimap: bool = False,
+) -> folium.Map:
+    if focus_lat is not None and focus_lng is not None:
+        lat, lng, zoom = float(focus_lat), float(focus_lng), 15
+    else:
+        lat, lng, zoom = VIEWS.get(view_name, VIEWS["Caracas / La Guaira"])
+    fmap = folium.Map(
+        location=[lat, lng],
+        zoom_start=zoom,
+        tiles=None,
+        control_scale=True,
+        prefer_canvas=True,
+    )
+    primary = basemap if basemap in BASEMAPS else "OSM claro (Carto)"
+    _tile_layer(primary, show=True).add_to(fmap)
+    if show_extra_basemaps:
+        for key in BASEMAPS:
+            if key == primary:
+                continue
+            _tile_layer(key, show=False).add_to(fmap)
+
+    if show_heat:
+        _add_heatmap_weighted(
+            fmap,
+            ubicaciones,
+            name="Mapa de calor (concentración de casos)",
+            show=True,
+        )
+    if show_puntos:
+        _add_pendientes_volumen(
+            fmap,
+            ubicaciones,
+            show=True,
+            max_markers=max_markers,
+        )
+
+    if highlight is not None and not highlight.empty:
+        hg = folium.FeatureGroup(name="Resultado de búsqueda", show=True)
+        for r in highlight.dropna(subset=["lat", "lng"]).itertuples(index=False):
+            n = _volumen_casos(r)
+            folium.Marker(
+                location=[float(r.lat), float(r.lng)],
+                popup=folium.Popup(
+                    _popup_from_dict(
+                        "Búsqueda",
+                        {
+                            "Cantidad": n,
+                            "Códigos": getattr(r, "codigos_casos", "")
+                            or getattr(r, "codigos_grupo", ""),
+                            "Dirección": getattr(r, "direccion", ""),
+                        },
+                    ),
+                    max_width=360,
+                ),
+                tooltip=_esc(getattr(r, "direccion", "Resultado")),
+                icon=folium.Icon(color="red", icon="home", prefix="fa"),
+            ).add_to(hg)
+        hg.add_to(fmap)
+
+    if show_minimap:
+        MiniMap(toggle_display=True, position="bottomleft").add_to(fmap)
+    MeasureControl(position="topleft").add_to(fmap)
+    folium.LayerControl(collapsed=True, position="topright").add_to(fmap)
+    return fmap
+
+
+@st.cache_data(show_spinner="Generando mapa de pendientes…", ttl=600)
+def _cached_pendientes_map_html(
+    *,
+    ubic_bytes: bytes,
+    highlight_bytes: bytes,
+    basemap: str,
+    view_name: str,
+    show_puntos: bool,
+    show_heat: bool,
+    show_extra_basemaps: bool,
+    max_markers: int | None,
+    focus_lat: float | None,
+    focus_lng: float | None,
+    show_minimap: bool,
+) -> str:
+    from io import BytesIO
+
+    def read(b: bytes) -> pd.DataFrame:
+        if not b:
+            return pd.DataFrame()
+        return pd.read_parquet(BytesIO(b))
+
+    fmap = build_pendientes_map(
+        ubicaciones=read(ubic_bytes),
+        basemap=basemap,
+        view_name=view_name,
+        show_puntos=show_puntos,
+        show_heat=show_heat,
+        show_extra_basemaps=show_extra_basemaps,
+        max_markers=max_markers,
+        focus_lat=focus_lat,
+        focus_lng=focus_lng,
+        highlight=read(highlight_bytes) if highlight_bytes else None,
+        show_minimap=show_minimap,
+    )
+    return fmap.get_root().render()
+
+
+def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
+    """
+    Mapa de 1×10 pendientes agrupados por ubicación.
+    Capas: puntos por volumen + heatmap de concentración.
+    """
+    from ui_theme import render_section
+
+    if ubicaciones is None or ubicaciones.empty:
+        st.warning("Sin ubicaciones pendientes para mapear con el filtro actual.")
+        return
+
+    work = ubicaciones.dropna(subset=["lat", "lng"]).copy()
+    if "cantidad_casos" not in work.columns and "n_reportes" in work.columns:
+        work["cantidad_casos"] = work["n_reportes"]
+    if "cantidad_casos" not in work.columns:
+        work["cantidad_casos"] = 1
+
+    render_section(
+        "Cartografía",
+        "Misma base que el mapa operativo. Los puntos están agrupados por ubicación.",
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        basemap = st.selectbox(
+            "Mapa base inicial",
+            options=list(BASEMAPS.keys()),
+            index=list(BASEMAPS.keys()).index("OSM claro (Carto)"),
+            key="pend_basemap",
+        )
+    with c2:
+        view_name = st.selectbox(
+            "Vista inicial",
+            list(VIEWS.keys()),
+            key="pend_view",
+        )
+
+    render_section(
+        "Capas",
+        "Puntos: tamaño y color según cantidad de casos. "
+        "Calor: concentra donde hay más reportes agrupados.",
+    )
+    layer_opts = [
+        "Puntos por volumen de casos",
+        "Mapa de calor (concentración)",
+    ]
+    layers = st.multiselect(
+        "Qué mostrar",
+        options=layer_opts,
+        default=layer_opts,
+        key="pend_layers",
+        help="Ambas capas usan ubicaciones unificadas (no un punto por denunciante).",
+    )
+    show_puntos = "Puntos por volumen de casos" in layers
+    show_heat = "Mapa de calor (concentración)" in layers
+
+    st.caption(
+        "Leyenda de puntos: ámbar = 1 caso · naranja = 2–4 · rojo = 5–9 · "
+        "rojo oscuro = 10+ reportes en el mismo punto."
+    )
+
+    render_section("Búsqueda", "Centra el mapa en dirección o código de caso.")
+    q = st.text_input(
+        "Dirección o código",
+        value="",
+        placeholder="Ej. Los frailes, DP-13300638",
+        key="pend_search",
+        label_visibility="collapsed",
+    )
+    highlight = pd.DataFrame()
+    focus_lat = focus_lng = None
+    if q.strip():
+        tokens = [t.strip() for t in q.strip().split() if t.strip()]
+        mask = pd.Series(True, index=work.index)
+        text = work.get("direccion", pd.Series("", index=work.index)).fillna("").astype(str)
+        for col in ("codigos_casos", "codigos_grupo", "codigo_caso"):
+            if col in work.columns:
+                text = text + " " + work[col].fillna("").astype(str)
+        for t in tokens:
+            mask &= text.str.contains(t, case=False, na=False, regex=False)
+        highlight = work.loc[mask].copy()
+        if highlight.empty:
+            st.warning(f"Sin resultados para «{q}».")
+        else:
+            st.success(
+                f"{len(highlight):,} ubicación(es). "
+                f"Primera: {highlight.iloc[0].get('direccion', '')}".replace(",", ".")
+            )
+            focus_lat = float(highlight.iloc[0]["lat"])
+            focus_lng = float(highlight.iloc[0]["lng"])
+
+    with st.expander("Extras del mapa", expanded=False):
+        show_minimap = st.checkbox("Mini-mapa", value=False, key="pend_mini")
+        cap = st.checkbox(
+            "Limitar a 2.500 puntos (si el mapa va lento)",
+            value=len(work) > 4000,
+            key="pend_cap",
+        )
+    max_markers = 2500 if cap else None
+
+    # Priorizar puntos con más casos al muestrear
+    to_map = work.sort_values("cantidad_casos", ascending=False)
+    html = _cached_pendientes_map_html(
+        ubic_bytes=_df_to_bytes(to_map, _PEND_COLS),
+        highlight_bytes=_df_to_bytes(
+            highlight.head(80) if not highlight.empty else None, _PEND_COLS
+        ),
+        basemap=basemap,
+        view_name=view_name,
+        show_puntos=show_puntos,
+        show_heat=show_heat,
+        show_extra_basemaps=True,
+        max_markers=max_markers,
+        focus_lat=focus_lat,
+        focus_lng=focus_lng,
+        show_minimap=show_minimap,
+    )
+    components.html(html, height=640, scrolling=False)
+    st.caption(
+        f"Ubicaciones en mapa: {len(to_map):,} · "
+        f"casos cubiertos: {int(to_map['cantidad_casos'].sum()):,} · "
+        f"control de capas / bases arriba a la derecha.".replace(",", ".")
     )

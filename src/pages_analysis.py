@@ -1080,7 +1080,8 @@ def _tab_severo_externo(hab: pd.DataFrame):
 
 
 def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
-    """Insumos para cuadrillas: ubicaciones agrupadas + diagnóstico de cruce."""
+    """1×10 pendientes: mapa por ubicación + listado/descargas + diagnóstico."""
+    from map_robust import render_pendientes_map_ui
     from reportes_inspecciones import (
         DIAGNOSTICO_CRUCE,
         excel_bytes_reportes_inspeccion,
@@ -1090,20 +1091,32 @@ def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
     from ui_theme import render_kpi_strip, render_section, render_section_tabs
 
     render_section(
-        "Reportes para inspecciones",
-        "Insumo operativo: una fila = una ubicación a visitar "
-        "(casos 1×10 agrupados). Incluye cantidad de reportes y todos "
-        "los códigos de caso del punto.",
+        "1×10 pendientes",
+        "Cola operativa para inspecciones: ubicaciones agrupadas "
+        "(no un punto por denunciante), mapa de calor y descargas.",
     )
 
     sec = render_section_tabs(
         [
-            ("pendientes", "Pendientes por ubicación"),
+            ("mapa", "Mapa"),
+            ("listado", "Listado y descargas"),
             ("diagnostico", "Por qué cruzan pocos"),
         ],
         state_key="rep_insp_sec",
         heading="Secciones",
     )
+
+    # Filtros territoriales compartidos (mapa + listado)
+    estados_all = (
+        sorted(sol["estado_n"].dropna().unique().tolist())
+        if "estado_n" in sol.columns
+        else []
+    )
+    default_est = [
+        e
+        for e in ["DISTRITO CAPITAL", "LA GUAIRA", "MIRANDA"]
+        if e in estados_all
+    ]
 
     if sec == "diagnostico":
         render_kpi_strip(
@@ -1159,17 +1172,6 @@ una sola vez.
         )
         return
 
-    # ---- Pendientes por ubicación ----
-    estados_all = (
-        sorted(sol["estado_n"].dropna().unique().tolist())
-        if "estado_n" in sol.columns
-        else []
-    )
-    default_est = [
-        e
-        for e in ["DISTRITO CAPITAL", "LA GUAIRA", "MIRANDA"]
-        if e in estados_all
-    ]
     f1, f2, f3, f4 = st.columns(4)
     with f1:
         filt_est = st.multiselect(
@@ -1187,7 +1189,9 @@ una sola vez.
         else []
     )
     with f2:
-        filt_mun = st.multiselect("Municipio", options=munis, default=[], key="ri_mun")
+        filt_mun = st.multiselect(
+            "Municipio", options=munis, default=[], key="ri_mun"
+        )
     sol_p = sol_f
     if filt_mun and "municipio_n" in sol_p.columns:
         sol_p = sol_p[sol_p["municipio_n"].isin(filt_mun)]
@@ -1224,16 +1228,12 @@ una sola vez.
         parroquias=filt_parr or None,
         min_casos=min_eff,
     )
-    todos = frame_ubicaciones_inspeccion(
-        sol,
-        solo_pendientes=False,
-        estados=filt_est or None,
-        municipios=filt_mun or None,
-        parroquias=filt_parr or None,
-        min_casos=min_eff,
-    )
-    rp = resumen_ubicaciones(pend)
+    # Alias para el mapa (n_reportes)
+    if not pend.empty and "cantidad_casos" in pend.columns:
+        pend = pend.copy()
+        pend["n_reportes"] = pend["cantidad_casos"]
 
+    rp = resumen_ubicaciones(pend)
     render_kpi_strip(
         [
             {
@@ -1259,6 +1259,25 @@ una sola vez.
                 "tone": "flag",
             },
         ]
+    )
+
+    if sec == "mapa":
+        st.info(
+            "Los puntos están **ubicaciones unificadas** (radio ~20 m). "
+            "Ámbar → naranja → rojo → rojo oscuro según cuántos casos hay "
+            "en el mismo punto. El mapa de calor pondera por esa cantidad."
+        )
+        render_pendientes_map_ui(pend)
+        return
+
+    # ---- Listado y descargas ----
+    todos = frame_ubicaciones_inspeccion(
+        sol,
+        solo_pendientes=False,
+        estados=filt_est or None,
+        municipios=filt_mun or None,
+        parroquias=filt_parr or None,
+        min_casos=min_eff,
     )
 
     st.caption(
