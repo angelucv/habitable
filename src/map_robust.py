@@ -735,15 +735,15 @@ def _color_por_volumen(n: int) -> str:
     return "#F59E0B"  # ámbar (1 caso)
 
 
-def _radius_por_volumen(n: int) -> int:
-    """Radios compactos para no tapar localidades del mapa base."""
+def _radius_por_volumen(n: int) -> float:
+    """Radios muy compactos para no tapar localidades del mapa base."""
     if n >= 10:
-        return 6
+        return 3.5
     if n >= 5:
-        return 4
+        return 2.5
     if n >= 2:
-        return 3
-    return 2
+        return 2.0
+    return 1.5
 
 
 def _add_heatmap_weighted(
@@ -1036,14 +1036,8 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
 
     with st.expander("Extras del mapa", expanded=False):
         show_minimap = st.checkbox("Mini-mapa", value=False, key="pend_mini")
-        cap = st.checkbox(
-            "Limitar a 2.500 puntos (si el mapa va lento)",
-            value=len(work) > 4000,
-            key="pend_cap",
-        )
-    max_markers = 2500 if cap else None
 
-    # Priorizar puntos con más casos al muestrear
+    # Todos los puntos del filtro (sin tope artificial)
     to_map = work.sort_values("cantidad_casos", ascending=False)
     html = _cached_pendientes_map_html(
         ubic_bytes=_df_to_bytes(to_map, _PEND_COLS),
@@ -1055,7 +1049,7 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
         show_puntos=show_puntos,
         show_heat=show_heat,
         show_extra_basemaps=True,
-        max_markers=max_markers,
+        max_markers=None,
         focus_lat=focus_lat,
         focus_lng=focus_lng,
         show_minimap=show_minimap,

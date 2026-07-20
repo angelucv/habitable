@@ -1172,6 +1172,10 @@ una sola vez.
         )
         return
 
+    render_section(
+        "Filtros (mapa y descarga)",
+        "Acota territorio y volumen para ver menos puntos y bajar un archivo más pequeño.",
+    )
     f1, f2, f3, f4 = st.columns(4)
     with f1:
         filt_est = st.multiselect(
@@ -1217,8 +1221,18 @@ una sola vez.
             value=False,
             key="ri_multi",
         )
+        pri_alta = st.checkbox(
+            "Solo prioridad alta (5+)",
+            value=False,
+            key="ri_pri_alta",
+            help="Ubicaciones con 5 o más casos agrupados.",
+        )
 
-    min_eff = max(int(min_casos), 2 if solo_multi else 1)
+    min_eff = max(
+        int(min_casos),
+        2 if solo_multi else 1,
+        5 if pri_alta else 1,
+    )
 
     pend = frame_ubicaciones_inspeccion(
         sol,
@@ -1232,6 +1246,15 @@ una sola vez.
     if not pend.empty and "cantidad_casos" in pend.columns:
         pend = pend.copy()
         pend["n_reportes"] = pend["cantidad_casos"]
+
+    todos = frame_ubicaciones_inspeccion(
+        sol,
+        solo_pendientes=False,
+        estados=filt_est or None,
+        municipios=filt_mun or None,
+        parroquias=filt_parr or None,
+        min_casos=min_eff,
+    )
 
     rp = resumen_ubicaciones(pend)
     render_kpi_strip(
@@ -1261,25 +1284,53 @@ una sola vez.
         ]
     )
 
+    def _bloque_descarga(key_prefix: str) -> None:
+        render_section(
+            "Descargar selección filtrada",
+            "El archivo respeta estado / municipio / parroquia / mínimo de reportes "
+            "de arriba. Una fila = una ubicación (cantidad_casos + codigos_casos).",
+        )
+        st.caption(
+            f"Selección actual: **{fmt_num(len(pend))}** ubicaciones · "
+            f"**{fmt_num(rp['n_casos'])}** casos 1×10."
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            st.download_button(
+                "CSV pendientes filtrados",
+                data=pend.to_csv(index=False).encode("utf-8-sig"),
+                file_name="pendientes_1x10_por_ubicacion_filtrado.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key=f"{key_prefix}_csv",
+            )
+        with c2:
+            xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
+            st.download_button(
+                "Excel insumos filtrados",
+                data=xlsx,
+                file_name="reportes_1x10_pendientes_filtrado.xlsx",
+                mime=(
+                    "application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet"
+                ),
+                type="primary",
+                use_container_width=True,
+                key=f"{key_prefix}_xlsx",
+            )
+
     if sec == "mapa":
         st.info(
             "Los puntos están **ubicaciones unificadas** (radio ~20 m). "
             "Ámbar → naranja → rojo → rojo oscuro según cuántos casos hay "
-            "en el mismo punto. El mapa de calor pondera por esa cantidad."
+            "en el mismo punto. Usa los filtros de arriba para acotar el mapa "
+            "y descargar solo ese recorte."
         )
         render_pendientes_map_ui(pend)
+        _bloque_descarga("dl_mapa")
         return
 
     # ---- Listado y descargas ----
-    todos = frame_ubicaciones_inspeccion(
-        sol,
-        solo_pendientes=False,
-        estados=filt_est or None,
-        municipios=filt_mun or None,
-        parroquias=filt_parr or None,
-        min_casos=min_eff,
-    )
-
     st.caption(
         "Columnas clave: **cantidad_casos** (cuántas veces se reportó el punto) "
         "y **codigos_casos** (todos los números de caso del grupo, separados por `|`). "
@@ -1311,27 +1362,4 @@ una sola vez.
     st.caption(
         f"Mostrando hasta 800 de {fmt_num(len(pend))} ubicaciones pendientes."
     )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.download_button(
-            "Descargar pendientes por ubicación (CSV)",
-            data=pend.to_csv(index=False).encode("utf-8-sig"),
-            file_name="pendientes_inspeccion_por_ubicacion.csv",
-            mime="text/csv",
-            use_container_width=True,
-            key="dl_ri_csv",
-        )
-    with c2:
-        xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
-        st.download_button(
-            "Descargar Excel insumos inspecciones",
-            data=xlsx,
-            file_name="reportes_inspecciones_por_ubicacion.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            ),
-            type="primary",
-            use_container_width=True,
-            key="dl_ri_xlsx",
-        )
+    _bloque_descarga("dl_listado")
