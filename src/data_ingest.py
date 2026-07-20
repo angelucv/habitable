@@ -1,37 +1,18 @@
-"""
-Carga de Excel desde la interfaz Streamlit
-==========================================
-
-Permite a cualquier colaborador autenticado:
-1. Subir el archivo de solicitudes 1×10.
-2. Subir el archivo de inspecciones Habitable.
-3. Ejecutar el pipeline (``prepare_data.run_pipeline``).
-4. Invalidar caché del BI para que las tres pestañas muestren datos nuevos.
-
-Por defecto el servicio arranca con un **cruce precargado** en
-``data/processed/``. Una carga nueva **sustituye** ese resultado.
-
-Los Excel se guardan en ``data/uploads/`` (no se versionan en Git).
-"""
+"""Carga de archivos fuente 1×10 y Habitable desde el BI."""
 
 from __future__ import annotations
 
-import gc
-import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 
 from prepare_data import run_pipeline
-from runtime_limits import allow_heavy_pipeline, is_low_memory
 from ui_theme import render_section
 
 ROOT = Path(__file__).resolve().parents[1]
 UPLOAD_DIR = ROOT / "data" / "uploads"
-PROCESSED = ROOT / "data" / "processed"
 META_PATH = UPLOAD_DIR / "last_upload.json"
-SEED_META = PROCESSED / "seed_meta.json"
 
 
 def _ensure_upload_dir() -> None:
@@ -44,58 +25,29 @@ def _save_upload(uploaded, dest: Path) -> Path:
     return dest
 
 
-def data_origin_caption() -> str | None:
-    """Texto corto sobre el origen del cruce actual (sidebar / panel)."""
-    if META_PATH.exists():
-        try:
-            ts = META_PATH.read_text(encoding="utf-8").strip()
-            return f"Datos actualizados por carga · {ts}"
-        except Exception:  # noqa: BLE001
-            return "Datos actualizados por carga en la UI"
-    if SEED_META.exists():
-        try:
-            meta = json.loads(SEED_META.read_text(encoding="utf-8"))
-            gen = meta.get("generado_en", "")
-            return f"Precarga del despliegue · {gen}"
-        except Exception:  # noqa: BLE001
-            return "Precarga del despliegue"
-    if (PROCESSED / "summary.json").exists():
-        return "Cruce procesado disponible"
-    return None
+def _resolve_hab_path() -> Path | None:
+    """Prefiere CSV reciente; si no, Excel cargado."""
+    csv_p = UPLOAD_DIR / "inspecciones_habitable.csv"
+    xlsx_p = UPLOAD_DIR / "inspecciones_habitable.xlsx"
+    cands = [p for p in (csv_p, xlsx_p) if p.exists()]
+    if not cands:
+        return None
+    return max(cands, key=lambda p: p.stat().st_mtime)
 
 
 def render_upload_panel() -> None:
-    """Cargar Excel nuevos: al procesar, sustituyen el cruce precargado."""
-    ready = (PROCESSED / "solicitudes.parquet").exists() and (
-        PROCESSED / "inspecciones.parquet"
-    ).exists()
-
+    """Sección ejecutiva: cargar 1×10 y Habitable → regenerar cruce."""
     render_section(
-        "Actualizar datos (opcional)",
-        "El tablero ya trae un cruce precargado. Si subes Excel nuevos y "
-        "procesas, **sustituyen** el resultado actual en mapa y análisis.",
+        "Cargar datos y actualizar cruce",
+        "Sube el Excel de solicitudes 1×10 y el Excel/CSV de inspecciones Habitable. "
+        "Al procesar se regeneran el mapa y los dos análisis.",
     )
-
-    origin = data_origin_caption()
-    if origin:
-        st.caption(origin)
-    if ready:
-        try:
-            summary = json.loads(
-                (PROCESSED / "summary.json").read_text(encoding="utf-8")
-            )
-            st.info(
-                f"En uso ahora → 1×10: {summary.get('n_1x10', 0):,} · "
-                f"Habitable: {summary.get('n_hab', 0):,} · "
-                f"Ya atendidas: {summary.get('coincide_auto', 0):,} · "
-                f"Pendientes: {summary.get('solo_1x10', 0):,}".replace(",", ".")
-            )
-        except Exception:  # noqa: BLE001
-            pass
 
     _ensure_upload_dir()
     path_1x10 = UPLOAD_DIR / "solicitudes_1x10.xlsx"
-    path_hab = UPLOAD_DIR / "inspecciones_habitable.xlsx"
+    path_hab_xlsx = UPLOAD_DIR / "inspecciones_habitable.xlsx"
+    path_hab_csv = UPLOAD_DIR / "inspecciones_habitable.csv"
+    path_hab_current = _resolve_hab_path()
 
     c1, c2 = st.columns(2)
     with c1:
@@ -107,54 +59,50 @@ def render_upload_panel() -> None:
             label_visibility="collapsed",
         )
         if path_1x10.exists() and not f1:
-            st.caption(f"Guardado previo: {path_1x10.name}")
+            st.caption(f"En uso: {path_1x10.name}")
     with c2:
         st.markdown("**Archivo Habitable** (inspecciones)")
         f2 = st.file_uploader(
-            "Excel de inspecciones Habitable",
-            type=["xlsx", "xls"],
+            "Excel o CSV de inspecciones Habitable",
+            type=["xlsx", "xls", "csv"],
             key="upload_hab",
             label_visibility="collapsed",
         )
         sheet = st.text_input(
-            "Hoja Habitable",
+            "Hoja Habitable (solo Excel)",
             value="Inspecciones",
-            help="Nombre de la hoja (por defecto Inspecciones).",
+            help="Nombre de la hoja si el archivo es Excel. En CSV se ignora.",
         )
-        if path_hab.exists() and not f2:
-            st.caption(f"Guardado previo: {path_hab.name}")
-
-    if is_low_memory() and not allow_heavy_pipeline():
-        st.warning(
-            "En modo bajo consumo el procesamiento desde Excel está bloqueado. "
-            "Define `BI_ALLOW_HEAVY_PIPELINE=1` o desactiva `BI_LOW_MEMORY`."
-        )
+        if path_hab_current is not None and not f2:
+            st.caption(f"En uso: {path_hab_current.name}")
 
     b1, b2 = st.columns([2, 1])
     with b1:
         run = st.button(
-            "Sustituir cruce con estos archivos",
+            "Procesar cruce y actualizar pestañas",
             type="primary",
             use_container_width=True,
-            disabled=is_low_memory() and not allow_heavy_pipeline(),
         )
     with b2:
-        st.caption("Reemplaza la precarga · 1–2 min.")
+        st.caption("Puede tardar 1–2 minutos con archivos grandes.")
 
     if run:
-        if is_low_memory() and not allow_heavy_pipeline():
-            st.error("Pipeline bloqueado en modo bajo consumo.")
-            return
-
         if f1:
             _save_upload(f1, path_1x10)
         if f2:
-            _save_upload(f2, path_hab)
+            name = (getattr(f2, "name", "") or "").lower()
+            dest = path_hab_csv if name.endswith(".csv") else path_hab_xlsx
+            _save_upload(f2, dest)
+            # Evitar que un archivo viejo del otro formato gane por mtime
+            other = path_hab_xlsx if dest == path_hab_csv else path_hab_csv
+            if other.exists():
+                other.unlink()
 
-        if not path_1x10.exists() or not path_hab.exists():
+        path_hab = _resolve_hab_path()
+        if not path_1x10.exists() or path_hab is None:
             st.error(
                 "Se necesitan ambos archivos. Carga 1×10 y Habitable "
-                "(o deja los ya guardados de una carga previa)."
+                "(o deja los ya guardados en una carga previa)."
             )
             return
 
@@ -169,30 +117,13 @@ def render_upload_panel() -> None:
             except Exception as exc:  # noqa: BLE001
                 st.error(f"No se pudo procesar: {exc}")
                 return
-            finally:
-                gc.collect()
 
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        META_PATH.write_text(now, encoding="utf-8")
-        # Marca que ya no es la precarga del despliegue
-        SEED_META.write_text(
-            json.dumps(
-                {
-                    "origen": "carga_ui",
-                    "generado_en": now,
-                    "nota": "Sustituyó la precarga del despliegue.",
-                    "n_1x10": summary.get("n_1x10"),
-                    "n_hab": summary.get("n_hab"),
-                    "coincide_auto": summary.get("coincide_auto"),
-                    "solo_1x10": summary.get("solo_1x10"),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
+        META_PATH.write_text(
+            datetime.now().isoformat(timespec="seconds"),
             encoding="utf-8",
         )
         st.success(
-            f"Cruce sustituido · 1×10: {summary.get('n_1x10', 0):,} · "
+            f"Cruce actualizado · 1×10: {summary.get('n_1x10', 0):,} · "
             f"Habitable: {summary.get('n_hab', 0):,} · "
             f"Ya atendidas: {summary.get('coincide_auto', 0):,}".replace(",", ".")
         )

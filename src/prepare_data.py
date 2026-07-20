@@ -94,7 +94,11 @@ def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
 
 
 def prepare_habitable(path: str, sheet: str, geo_cfg: dict) -> pd.DataFrame:
-    df = pd.read_excel(path, sheet_name=sheet, dtype=str)
+    src = Path(path)
+    if src.suffix.lower() == ".csv":
+        df = pd.read_csv(src, dtype=str, encoding="utf-8")
+    else:
+        df = pd.read_excel(src, sheet_name=sheet, dtype=str)
     df["lat"] = df["lat"].map(lambda v: parse_coord(v, "lat"))
     df["lng"] = df["lng"].map(lambda v: parse_coord(v, "lng"))
     df["nombre_n"] = df["nombre_edificacion"].map(normalize_name)
@@ -273,14 +277,20 @@ def run_pipeline(
     _log("Cargando 1×10…")
     sol = prepare_solicitudes(sol_src, geo)
     _log("Cargando Habitable…")
+    hab_src_path = Path(hab_src)
     try:
-        hab = prepare_habitable(hab_src, sheet, geo)
+        if hab_src_path.suffix.lower() == ".csv":
+            hab = prepare_habitable(hab_src, sheet, geo)
+            sheet = "(csv)"
+        else:
+            hab = prepare_habitable(hab_src, sheet, geo)
     except ValueError:
         # Si el nombre de hoja no existe, usar la primera
         xl = pd.ExcelFile(hab_src)
         hab = prepare_habitable(hab_src, xl.sheet_names[0], geo)
         sheet = xl.sheet_names[0]
         _log(f"Hoja Habitable: {sheet}")
+    _log(f"Habitable filas: {len(hab)}")
 
     _log(f"Matching radio {match_cfg['radius_m']} m…")
     sol = match_solicitudes(
@@ -364,6 +374,7 @@ def run_pipeline(
             "material_n",
             "num_pisos",
             "num_pisos_n",
+            "ente",
             "lat",
             "lng",
             "mapeable",
@@ -374,6 +385,9 @@ def run_pipeline(
             "created_at",
             "observaciones",
             "inspector_nombre",
+            "validated",
+            "evento",
+            "fecha_evento",
             "riesgo_externo",
             "riesgo_severo",
             "riesgo_moderado",

@@ -1,39 +1,29 @@
-# =============================================================================
-# Configuración del BI Cruce 1×10 × Habitable
-# -----------------------------------------------------------------------------
-# En local: puedes apuntar a rutas absolutas de Excel.
-# En Render / producción: deja vacías las rutas de sources y usa la carga
-# por pantalla (archivos quedan en data/uploads/).
-# =============================================================================
-
+# Rutas F0 — archivos actuales en Descargas (ajustar si cambian)
 [sources]
-# Rutas opcionales a Excel locales (desarrollo). En producción suelen ir vacías.
-solicitudes_1x10 = ''
-inspecciones_habitable = ''
+solicitudes_1x10 = 'C:/Users/Angel/Downloads/Sin título 1x10.xlsx'
+inspecciones_habitable = 'C:/Users/Angel/Downloads/habitable_inspecciones_2026-07-20_22-11-06.csv'
 habitable_sheet = 'Inspecciones'
 
 [matching]
-# Radio geográfico (metros) para buscar la inspección Habitable más cercana
-# a cada solicitud 1×10.
+# Radio en metros para match geo 1×10 ↔ Habitable
 radius_m = 50
-# Score fuzzy de nombre (0-100) para clasificar match "alta"
+# Similarity mínima de nombre (0-100) para match alto
 name_score_high = 85
-# Score para match "media" (o refuerzo a ≤20 m con score ≥50)
+# Similarity mínima para reforzar match medio
 name_score_medium = 70
-# Por debajo de este score, un vecino cercano NO se trata como "dudoso"
-# (se deja como pendiente real: evita falsos como Cattleya↔Orion).
+# Por debajo de esto, un vecino a ≤50 m NO cuenta como “dudoso”
+# (p. ej. Cattleya vs Orion score ~19 → sigue como pendiente)
 name_score_geo_min = 40
-# Radio para unificar varios reportes 1×10 del mismo edificio/sitio.
+# Unificación de reportes 1×10 en la misma ubicación
 dedupe_radius_m = 20
 
 [geo]
-# Bounding box aproximado de Venezuela (filtro de calidad de coordenadas)
+# Bounding box Venezuela (calidad)
 lat_min = 0.5
 lat_max = 12.5
 lng_min = -73.5
 lng_max = -59.5
-# Pin hotspot conocido (Libertador): muchas inspecciones distintas
-# comparten el mismo punto → baja confianza cartográfica.
+# Pin hotspot conocido (Libertador) — baja confianza
 hotspot_lat = 10.488587
 hotspot_lng = -66.976782
 hotspot_decimals = 6
