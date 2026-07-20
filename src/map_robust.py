@@ -736,13 +736,14 @@ def _color_por_volumen(n: int) -> str:
 
 
 def _radius_por_volumen(n: int) -> int:
+    """Radios compactos para no tapar localidades del mapa base."""
     if n >= 10:
-        return 16
+        return 6
     if n >= 5:
-        return 12
+        return 4
     if n >= 2:
-        return 8
-    return 5
+        return 3
+    return 2
 
 
 def _add_heatmap_weighted(
@@ -818,8 +819,8 @@ def _add_pendientes_volumen(
             color=color,
             fill=True,
             fill_color=color,
-            fill_opacity=0.82 if n >= 5 else 0.7,
-            weight=2 if n >= 5 else 1,
+            fill_opacity=0.75 if n >= 5 else 0.65,
+            weight=1,
             popup=folium.Popup(popup, max_width=360),
             tooltip=f"{n} caso(s) · {_esc(getattr(r, 'direccion', ''))[:60]}",
         ).add_to(fg)
