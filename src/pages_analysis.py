@@ -1277,10 +1277,10 @@ una sola vez.
         )
     with d3:
         st.caption(
-            f"**{fmt_num(len(pend))}** ubicaciones · "
-            f"**{fmt_num(rp['n_casos'])}** casos · "
-            f"multi **{fmt_num(rp['n_multi'])}** · "
-            f"máx **{fmt_num(rp['max_casos'])}**"
+            f"**{fmt_num(len(pend))}** ubicaciones pendientes · "
+            f"**{fmt_num(rp['n_casos'])}** casos 1×10 en total · "
+            f"**{fmt_num(rp['n_multi'])}** ubicaciones con 2 o más reportes · "
+            f"máximo **{fmt_num(rp['max_casos'])}** casos en un mismo punto"
         )
 
     if sec == "mapa":
