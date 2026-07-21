@@ -947,10 +947,8 @@ def _cached_pendientes_map_html(
 def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
     """
     Mapa de 1×10 pendientes agrupados por ubicación.
-    Capas: puntos por volumen + heatmap de concentración.
+    Controles compactos para que el mapa quede arriba.
     """
-    from ui_theme import render_section
-
     if ubicaciones is None or ubicaciones.empty:
         st.warning("Sin ubicaciones pendientes para mapear con el filtro actual.")
         return
@@ -961,57 +959,52 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
     if "cantidad_casos" not in work.columns:
         work["cantidad_casos"] = 1
 
-    render_section(
-        "Cartografía",
-        "Misma base que el mapa operativo. Los puntos están agrupados por ubicación.",
-    )
-    c1, c2 = st.columns(2)
+    # Una sola franja de controles (menos scroll hasta el mapa)
+    c1, c2, c3, c4 = st.columns([1.2, 1.1, 1.6, 1.4])
     with c1:
         basemap = st.selectbox(
-            "Mapa base inicial",
+            "Base",
             options=list(BASEMAPS.keys()),
             index=list(BASEMAPS.keys()).index("OSM claro (Carto)"),
             key="pend_basemap",
+            label_visibility="collapsed",
+            help="Mapa base",
         )
+        st.caption("Base")
     with c2:
         view_name = st.selectbox(
-            "Vista inicial",
+            "Vista",
             list(VIEWS.keys()),
             key="pend_view",
+            label_visibility="collapsed",
         )
+        st.caption("Vista")
+    with c3:
+        layer_opts = [
+            "Puntos por volumen de casos",
+            "Mapa de calor (concentración)",
+        ]
+        layers = st.multiselect(
+            "Capas",
+            options=layer_opts,
+            default=layer_opts,
+            key="pend_layers",
+            label_visibility="collapsed",
+        )
+        st.caption("Capas")
+    with c4:
+        q = st.text_input(
+            "Buscar",
+            value="",
+            placeholder="Dirección o código…",
+            key="pend_search",
+            label_visibility="collapsed",
+        )
+        st.caption("Búsqueda")
 
-    render_section(
-        "Capas",
-        "Puntos: tamaño y color según cantidad de casos. "
-        "Calor: concentra donde hay más reportes agrupados.",
-    )
-    layer_opts = [
-        "Puntos por volumen de casos",
-        "Mapa de calor (concentración)",
-    ]
-    layers = st.multiselect(
-        "Qué mostrar",
-        options=layer_opts,
-        default=layer_opts,
-        key="pend_layers",
-        help="Ambas capas usan ubicaciones unificadas (no un punto por denunciante).",
-    )
     show_puntos = "Puntos por volumen de casos" in layers
     show_heat = "Mapa de calor (concentración)" in layers
 
-    st.caption(
-        "Leyenda de puntos: ámbar = 1 caso · naranja = 2–4 · rojo = 5–9 · "
-        "rojo oscuro = 10+ reportes en el mismo punto."
-    )
-
-    render_section("Búsqueda", "Centra el mapa en dirección o código de caso.")
-    q = st.text_input(
-        "Dirección o código",
-        value="",
-        placeholder="Ej. Los frailes, DP-13300638",
-        key="pend_search",
-        label_visibility="collapsed",
-    )
     highlight = pd.DataFrame()
     focus_lat = focus_lng = None
     if q.strip():
@@ -1027,17 +1020,19 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
         if highlight.empty:
             st.warning(f"Sin resultados para «{q}».")
         else:
-            st.success(
-                f"{len(highlight):,} ubicación(es). "
-                f"Primera: {highlight.iloc[0].get('direccion', '')}".replace(",", ".")
-            )
             focus_lat = float(highlight.iloc[0]["lat"])
             focus_lng = float(highlight.iloc[0]["lng"])
+            st.caption(
+                f"{len(highlight):,} resultado(s) · "
+                f"{highlight.iloc[0].get('direccion', '')}".replace(",", ".")
+            )
 
-    with st.expander("Extras del mapa", expanded=False):
+    with st.expander("Extras", expanded=False):
         show_minimap = st.checkbox("Mini-mapa", value=False, key="pend_mini")
+        st.caption(
+            "Leyenda: ámbar=1 · naranja=2–4 · rojo=5–9 · rojo oscuro=10+."
+        )
 
-    # Todos los puntos del filtro (sin tope artificial)
     to_map = work.sort_values("cantidad_casos", ascending=False)
     html = _cached_pendientes_map_html(
         ubic_bytes=_df_to_bytes(to_map, _PEND_COLS),
@@ -1056,7 +1051,7 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
     )
     components.html(html, height=640, scrolling=False)
     st.caption(
-        f"Ubicaciones en mapa: {len(to_map):,} · "
-        f"casos cubiertos: {int(to_map['cantidad_casos'].sum()):,} · "
-        f"control de capas / bases arriba a la derecha.".replace(",", ".")
+        f"En mapa: {len(to_map):,} ubicaciones · "
+        f"{int(to_map['cantidad_casos'].sum()):,} casos · "
+        f"capas/bases arriba a la derecha.".replace(",", ".")
     )

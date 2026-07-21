@@ -1092,8 +1092,7 @@ def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
 
     render_section(
         "1×10 pendientes",
-        "Cola operativa para inspecciones: ubicaciones agrupadas "
-        "(no un punto por denunciante), mapa de calor y descargas.",
+        "Ubicaciones agrupadas · filtros + descarga arriba · mapa debajo.",
     )
 
     sec = render_section_tabs(
@@ -1172,12 +1171,10 @@ una sola vez.
         )
         return
 
-    render_section(
-        "Filtros (mapa y descarga)",
-        "Acota territorio y volumen para ver menos puntos y bajar un archivo más pequeño.",
-    )
-    f1, f2, f3, f4 = st.columns(4)
-    with f1:
+    # —— Barra compacta: filtros + descarga (mapa queda arriba) ——
+    st.markdown("##### Filtros y descarga")
+    r1 = st.columns([1.2, 1.1, 1.1, 0.75, 1.0])
+    with r1[0]:
         filt_est = st.multiselect(
             "Estado",
             options=estados_all,
@@ -1192,9 +1189,12 @@ una sola vez.
         if "municipio_n" in sol_f.columns
         else []
     )
-    with f2:
+    with r1[1]:
         filt_mun = st.multiselect(
-            "Municipio", options=munis, default=[], key="ri_mun"
+            "Municipio",
+            options=munis,
+            default=[],
+            key="ri_mun",
         )
     sol_p = sol_f
     if filt_mun and "municipio_n" in sol_p.columns:
@@ -1204,29 +1204,24 @@ una sola vez.
         if "parroquia_n" in sol_p.columns
         else []
     )
-    with f3:
+    with r1[2]:
         filt_parr = st.multiselect(
-            "Parroquia", options=parrs, default=[], key="ri_parr"
+            "Parroquia",
+            options=parrs,
+            default=[],
+            key="ri_parr",
         )
-    with f4:
+    with r1[3]:
         min_casos = st.number_input(
-            "Mín. reportes por ubicación",
+            "Mín. casos",
             min_value=1,
             max_value=50,
             value=1,
             key="ri_min",
         )
-        solo_multi = st.checkbox(
-            "Solo ubicaciones con 2+ reportes",
-            value=False,
-            key="ri_multi",
-        )
-        pri_alta = st.checkbox(
-            "Solo prioridad alta (5+)",
-            value=False,
-            key="ri_pri_alta",
-            help="Ubicaciones con 5 o más casos agrupados.",
-        )
+    with r1[4]:
+        solo_multi = st.checkbox("Solo 2+", value=False, key="ri_multi")
+        pri_alta = st.checkbox("Solo 5+", value=False, key="ri_pri_alta")
 
     min_eff = max(
         int(min_casos),
@@ -1242,7 +1237,6 @@ una sola vez.
         parroquias=filt_parr or None,
         min_casos=min_eff,
     )
-    # Alias para el mapa (n_reportes)
     if not pend.empty and "cantidad_casos" in pend.columns:
         pend = pend.copy()
         pend["n_reportes"] = pend["cantidad_casos"]
@@ -1255,88 +1249,48 @@ una sola vez.
         parroquias=filt_parr or None,
         min_casos=min_eff,
     )
-
     rp = resumen_ubicaciones(pend)
-    render_kpi_strip(
-        [
-            {
-                "label": "Ubicaciones pendientes",
-                "value": fmt_num(rp["n_ubicaciones"]),
-                "tone": "warning",
-                "hint": "Puntos a visitar (agrupados)",
-            },
-            {
-                "label": "Casos 1×10 cubiertos",
-                "value": fmt_num(rp["n_casos"]),
-                "tone": "info",
-                "hint": "Suma de reportes en esas ubicaciones",
-            },
-            {
-                "label": "Con varios reportes",
-                "value": fmt_num(rp["n_multi"]),
-                "tone": "muted",
-            },
-            {
-                "label": "Máx. en un punto",
-                "value": fmt_num(rp["max_casos"]),
-                "tone": "flag",
-            },
-        ]
-    )
 
-    def _bloque_descarga(key_prefix: str) -> None:
-        render_section(
-            "Descargar selección filtrada",
-            "El archivo respeta estado / municipio / parroquia / mínimo de reportes "
-            "de arriba. Una fila = una ubicación (cantidad_casos + codigos_casos).",
+    d1, d2, d3 = st.columns([1, 1, 2.2])
+    with d1:
+        st.download_button(
+            "CSV filtrado",
+            data=pend.to_csv(index=False).encode("utf-8-sig"),
+            file_name="pendientes_1x10_por_ubicacion_filtrado.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key=f"dl_{sec}_csv",
         )
+    with d2:
+        xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
+        st.download_button(
+            "Excel filtrado",
+            data=xlsx,
+            file_name="reportes_1x10_pendientes_filtrado.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet"
+            ),
+            type="primary",
+            use_container_width=True,
+            key=f"dl_{sec}_xlsx",
+        )
+    with d3:
         st.caption(
-            f"Selección actual: **{fmt_num(len(pend))}** ubicaciones · "
-            f"**{fmt_num(rp['n_casos'])}** casos 1×10."
+            f"**{fmt_num(len(pend))}** ubicaciones · "
+            f"**{fmt_num(rp['n_casos'])}** casos · "
+            f"multi **{fmt_num(rp['n_multi'])}** · "
+            f"máx **{fmt_num(rp['max_casos'])}**"
         )
-        c1, c2 = st.columns(2)
-        with c1:
-            st.download_button(
-                "CSV pendientes filtrados",
-                data=pend.to_csv(index=False).encode("utf-8-sig"),
-                file_name="pendientes_1x10_por_ubicacion_filtrado.csv",
-                mime="text/csv",
-                use_container_width=True,
-                key=f"{key_prefix}_csv",
-            )
-        with c2:
-            xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
-            st.download_button(
-                "Excel insumos filtrados",
-                data=xlsx,
-                file_name="reportes_1x10_pendientes_filtrado.xlsx",
-                mime=(
-                    "application/vnd.openxmlformats-officedocument"
-                    ".spreadsheetml.sheet"
-                ),
-                type="primary",
-                use_container_width=True,
-                key=f"{key_prefix}_xlsx",
-            )
 
     if sec == "mapa":
-        st.info(
-            "Los puntos están **ubicaciones unificadas** (radio ~20 m). "
-            "Ámbar → naranja → rojo → rojo oscuro según cuántos casos hay "
-            "en el mismo punto. Usa los filtros de arriba para acotar el mapa "
-            "y descargar solo ese recorte."
-        )
         render_pendientes_map_ui(pend)
-        _bloque_descarga("dl_mapa")
         return
 
-    # ---- Listado y descargas ----
+    # ---- Listado ----
     st.caption(
-        "Columnas clave: **cantidad_casos** (cuántas veces se reportó el punto) "
-        "y **codigos_casos** (todos los números de caso del grupo, separados por `|`). "
-        "No se repite una fila por vecino: la cuadrilla ve el punto una vez."
+        "Una fila = ubicación · **cantidad_casos** + **codigos_casos**."
     )
-
     show_cols = [
         c
         for c in [
@@ -1359,7 +1313,4 @@ una sola vez.
         use_container_width=True,
         hide_index=True,
     )
-    st.caption(
-        f"Mostrando hasta 800 de {fmt_num(len(pend))} ubicaciones pendientes."
-    )
-    _bloque_descarga("dl_listado")
+    st.caption(f"Hasta 800 de {fmt_num(len(pend))} ubicaciones.")
