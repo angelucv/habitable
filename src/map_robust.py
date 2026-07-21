@@ -705,10 +705,10 @@ _PEND_COLS = [
     "codigos_grupo",
     "n_reportes",
     "cantidad_casos",
+    "cumulo_casos",
     "estado_n",
     "municipio_n",
     "parroquia_n",
-    "prioridad_inspeccion",
     "estatus_cruce",
 ]
 
@@ -805,12 +805,12 @@ def _add_pendientes_volumen(
         radius = _radius_por_volumen(n)
         codes = getattr(r, "codigos_casos", None) or getattr(r, "codigos_grupo", "")
         fields = {
-            "Cantidad de casos": n,
+            "Cúmulo": getattr(r, "cumulo_casos", "")
+            or getattr(r, "cantidad_casos", n),
             "Códigos": codes,
             "Dirección": getattr(r, "direccion", ""),
             "Estado": getattr(r, "estado_n", ""),
             "Municipio": getattr(r, "municipio_n", ""),
-            "Prioridad": getattr(r, "prioridad_inspeccion", ""),
         }
         popup = _popup_from_dict("1×10 pendiente (ubicación)", fields)
         folium.CircleMarker(

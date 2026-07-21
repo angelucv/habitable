@@ -1099,6 +1099,7 @@ def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
         [
             ("mapa", "Mapa"),
             ("listado", "Listado y descargas"),
+            ("descripcion", "Análisis de descripción"),
             ("diagnostico", "Por qué cruzan pocos"),
         ],
         state_key="rep_insp_sec",
@@ -1220,13 +1221,23 @@ una sola vez.
             key="ri_min",
         )
     with r1[4]:
-        solo_multi = st.checkbox("Solo 2+", value=False, key="ri_multi")
-        pri_alta = st.checkbox("Solo 5+", value=False, key="ri_pri_alta")
+        solo_multi = st.checkbox(
+            "Cúmulos 2+",
+            value=False,
+            key="ri_multi",
+            help="Solo ubicaciones con 2 o más reportes (volumen, no prioridad).",
+        )
+        cumulo_5 = st.checkbox(
+            "Cúmulos 5+",
+            value=False,
+            key="ri_cumulo5",
+            help="Solo puntos con 5 o más casos agrupados (cúmulo, no prioridad).",
+        )
 
     min_eff = max(
         int(min_casos),
         2 if solo_multi else 1,
-        5 if pri_alta else 1,
+        5 if cumulo_5 else 1,
     )
 
     pend = frame_ubicaciones_inspeccion(
@@ -1287,14 +1298,84 @@ una sola vez.
         render_pendientes_map_ui(pend)
         return
 
+    if sec == "descripcion":
+        from analisis_descripcion import (
+            NIVEL_ETIQUETA,
+            enrich_descripciones,
+            frame_casos_por_nivel,
+            resumen_niveles,
+            top_palabras,
+        )
+
+        st.info(
+            "Clasificación **heurística por palabras** en la descripción del "
+            "ciudadano. Es solo **referencia** para lectura de la demanda: "
+            "no sustituye la inspección ni el semáforo Habitable, y **no** "
+            "define prioridad operativa por sí sola."
+        )
+        # Universo de casos (no ubicaciones) con mismos filtros territoriales
+        base = sol.copy()
+        if filt_est and "estado_n" in base.columns:
+            base = base[base["estado_n"].isin(filt_est)]
+        if filt_mun and "municipio_n" in base.columns:
+            base = base[base["municipio_n"].isin(filt_mun)]
+        if filt_parr and "parroquia_n" in base.columns:
+            base = base[base["parroquia_n"].isin(filt_parr)]
+
+        enr = enrich_descripciones(base)
+        res = resumen_niveles(enr)
+        c1, c2 = st.columns([1.2, 1])
+        with c1:
+            st.markdown("###### Distribución por nivel aparente")
+            st.dataframe(res, use_container_width=True, hide_index=True)
+        with c2:
+            st.markdown("###### Palabras frecuentes en descripciones")
+            st.dataframe(
+                top_palabras(enr, 25),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        nivel_opts = list(NIVEL_ETIQUETA.keys())
+        labels = [NIVEL_ETIQUETA[k] for k in nivel_opts]
+        sel_lab = st.multiselect(
+            "Filtrar por nivel aparente",
+            options=labels,
+            default=[
+                NIVEL_ETIQUETA["critico_aparente"],
+                NIVEL_ETIQUETA["severo_aparente"],
+            ],
+            key="desc_niveles",
+        )
+        inv = {v: k for k, v in NIVEL_ETIQUETA.items()}
+        sel_codes = [inv[x] for x in sel_lab if x in inv]
+        muestra = frame_casos_por_nivel(
+            base,
+            niveles=sel_codes or None,
+            limit=500,
+        )
+        st.caption(
+            f"Muestra hasta 500 casos · universo filtrado: {fmt_num(len(enr))}."
+        )
+        st.dataframe(muestra, use_container_width=True, hide_index=True)
+        st.download_button(
+            "CSV análisis de descripción (muestra)",
+            data=muestra.to_csv(index=False).encode("utf-8-sig"),
+            file_name="analisis_descripcion_1x10.csv",
+            mime="text/csv",
+            key="dl_desc_csv",
+        )
+        return
+
     # ---- Listado ----
     st.caption(
-        "Una fila = ubicación · **cantidad_casos** + **codigos_casos**."
+        "Una fila = ubicación · **cantidad_casos** (cúmulo) + **codigos_casos**. "
+        "El cúmulo indica cuántas veces se reportó el punto; no es prioridad."
     )
     show_cols = [
         c
         for c in [
-            "prioridad_inspeccion",
+            "cumulo_casos",
             "cantidad_casos",
             "codigos_casos",
             "direccion",

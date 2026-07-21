@@ -170,15 +170,16 @@ def frame_ubicaciones_inspeccion(
             lambda c: MATCH_CAT_DESC.get(str(c), str(c))
         )
 
-    out["prioridad_inspeccion"] = out["cantidad_casos"].map(
+    out["cumulo_casos"] = out["cantidad_casos"].map(
         lambda n: (
-            "Alta (5+ reportes)"
-            if int(n) >= 5
-            else ("Media (2–4 reportes)" if int(n) >= 2 else "Baja (1 reporte)")
+            f"Cúmulo de {int(n)} casos"
+            if pd.notna(n) and int(n) > 1
+            else "1 caso en el punto"
         )
     )
+    # No usar «prioridad»: el volumen solo indica repetición de reportes
 
-    # Orden operativo: más reportes primero
+    # Orden operativo: más reportes primero (volumen, no prioridad normativa)
     out = out.sort_values(
         ["cantidad_casos", "estado_n", "municipio_n"],
         ascending=[False, True, True],
@@ -188,7 +189,7 @@ def frame_ubicaciones_inspeccion(
     ordered = [
         c
         for c in [
-            "prioridad_inspeccion",
+            "cumulo_casos",
             "cantidad_casos",
             "codigos_casos",
             "direccion",
