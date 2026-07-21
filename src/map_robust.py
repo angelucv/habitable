@@ -954,10 +954,19 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
         return
 
     work = ubicaciones.dropna(subset=["lat", "lng"]).copy()
+    if "mapa_ok" in work.columns:
+        # Cinturón de seguridad: nunca pintar mar/dudosos si vienen marcados
+        work = work[work["mapa_ok"].fillna(True)]
     if "cantidad_casos" not in work.columns and "n_reportes" in work.columns:
         work["cantidad_casos"] = work["n_reportes"]
     if "cantidad_casos" not in work.columns:
         work["cantidad_casos"] = 1
+    if work.empty:
+        st.warning(
+            "Sin ubicaciones con GPS válido para mapear. "
+            "Prueba activar «Incluir GPS en mar / dudosos» o amplía el filtro."
+        )
+        return
 
     # Una sola franja de controles (menos scroll hasta el mapa)
     c1, c2, c3, c4 = st.columns([1.2, 1.1, 1.6, 1.4])

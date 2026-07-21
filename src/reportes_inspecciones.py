@@ -71,6 +71,7 @@ def frame_ubicaciones_inspeccion(
     *,
     solo_pendientes: bool = True,
     solo_mapeables: bool = True,
+    solo_mapa_ok: bool = True,
     estados: list[str] | None = None,
     municipios: list[str] | None = None,
     parroquias: list[str] | None = None,
@@ -80,6 +81,7 @@ def frame_ubicaciones_inspeccion(
     Una fila por ubicación (dedup_key): cantidad de casos + todos los códigos.
 
     Si no hay dedup_key, agrupa por redondeo de coords (aprox. 20 m).
+    Por defecto excluye GPS dudosos (mar abierto / fuera de estado).
     """
     if sol is None or sol.empty:
         return pd.DataFrame()
@@ -87,6 +89,12 @@ def frame_ubicaciones_inspeccion(
     work = sol.copy()
     if solo_mapeables and "mapeable" in work.columns:
         work = work[work["mapeable"].fillna(False)]
+    if solo_mapa_ok and "mapa_ok" in work.columns:
+        work = work[work["mapa_ok"].fillna(False)]
+    elif solo_mapa_ok and "calidad_geo" in work.columns:
+        work = work[
+            ~work["calidad_geo"].isin(["mar_abierto", "fuera_ve", "sin_coords"])
+        ]
     if estados and "estado_n" in work.columns:
         work = work[work["estado_n"].isin(estados)]
     if municipios and "municipio_n" in work.columns:

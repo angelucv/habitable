@@ -1233,6 +1233,12 @@ una sola vez.
             key="ri_cumulo5",
             help="Solo puntos con 5 o más casos agrupados (cúmulo, no prioridad).",
         )
+        incluir_gps_dudoso = st.checkbox(
+            "Incluir GPS en mar / dudosos",
+            value=False,
+            key="ri_gps_dudoso",
+            help="Por defecto se ocultan puntos en mar abierto o fuera de estado.",
+        )
 
     min_eff = max(
         int(min_casos),
@@ -1240,9 +1246,24 @@ una sola vez.
         5 if cumulo_5 else 1,
     )
 
+    # Conteo de excluidos por GPS dudoso (para aviso)
+    n_excl_gps = 0
+    if not incluir_gps_dudoso and "mapa_ok" in sol.columns:
+        base_geo = sol
+        if filt_est and "estado_n" in sol.columns:
+            base_geo = base_geo[base_geo["estado_n"].isin(filt_est)]
+        if "match_cat" in base_geo.columns:
+            base_geo = base_geo[base_geo["match_cat"].isin(["solo_1x10", "no_mapeable"])]
+        if "mapeable" in base_geo.columns:
+            base_geo = base_geo[base_geo["mapeable"].fillna(False)]
+        if "es_representante" in base_geo.columns:
+            base_geo = base_geo[base_geo["es_representante"]]
+        n_excl_gps = int((~base_geo["mapa_ok"].fillna(False)).sum())
+
     pend = frame_ubicaciones_inspeccion(
         sol,
         solo_pendientes=True,
+        solo_mapa_ok=not incluir_gps_dudoso,
         estados=filt_est or None,
         municipios=filt_mun or None,
         parroquias=filt_parr or None,
@@ -1255,6 +1276,7 @@ una sola vez.
     todos = frame_ubicaciones_inspeccion(
         sol,
         solo_pendientes=False,
+        solo_mapa_ok=not incluir_gps_dudoso,
         estados=filt_est or None,
         municipios=filt_mun or None,
         parroquias=filt_parr or None,
@@ -1287,11 +1309,17 @@ una sola vez.
             key=f"dl_{sec}_xlsx",
         )
     with d3:
+        extra_gps = (
+            f" · ocultos por GPS dudoso/mar: **{fmt_num(n_excl_gps)}**"
+            if (not incluir_gps_dudoso and n_excl_gps)
+            else ""
+        )
         st.caption(
             f"**{fmt_num(len(pend))}** ubicaciones pendientes · "
             f"**{fmt_num(rp['n_casos'])}** casos 1×10 en total · "
             f"**{fmt_num(rp['n_multi'])}** ubicaciones con 2 o más reportes · "
             f"máximo **{fmt_num(rp['max_casos'])}** casos en un mismo punto"
+            f"{extra_gps}"
         )
 
     if sec == "mapa":
