@@ -79,6 +79,13 @@ def _label_corte(summary: dict) -> dict:
         "archivo_hab": a2 or "(sin dato)",
         "n_1x10": fmt_num(n1 or 0),
         "n_hab": fmt_num(n2 or 0),
+        "etiq_1x10": summary.get("corte_1x10_etiqueta") or "17/07/2026",
+        "etiq_hab": summary.get("corte_habitable_etiqueta") or "",
+        "nota": summary.get("corte_nota")
+        or (
+            "Habitable actualizado al corte descargado el 21/07/2026 a las 10:00. "
+            "La información de 1×10 corresponde al corte del 17/07/2026 (semana previa)."
+        ),
     }
 
 
@@ -306,15 +313,20 @@ def main():
               <div style="color:#FCD116;font-size:0.68rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:0.45rem;">Fuentes en uso</div>
               <div style="color:#E2E8F0;font-size:0.72rem;margin-bottom:0.55rem;">
                 <div style="color:#94A3B8;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.04em;">1×10</div>
-                <div style="color:#FFFFFF;font-weight:600;word-break:break-word;">{corte['archivo_1x10']}</div>
+                <div style="color:#FFFFFF;font-weight:600;">Corte {corte['etiq_1x10']}</div>
                 <div style="color:#CBD5E1;">{corte['n_1x10']} registros</div>
+                <div style="color:#94A3B8;font-size:0.62rem;word-break:break-word;">{corte['archivo_1x10']}</div>
               </div>
               <div style="color:#E2E8F0;font-size:0.72rem;margin-bottom:0.55rem;">
                 <div style="color:#94A3B8;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.04em;">Habitable</div>
-                <div style="color:#FFFFFF;font-weight:600;word-break:break-word;">{corte['archivo_hab']}</div>
+                <div style="color:#FFFFFF;font-weight:600;">Corte {corte['etiq_hab'] or '—'}</div>
                 <div style="color:#CBD5E1;">{corte['n_hab']} inspecciones</div>
+                <div style="color:#94A3B8;font-size:0.62rem;word-break:break-word;">{corte['archivo_hab']}</div>
               </div>
-              <div style="color:#94A3B8;font-size:0.68rem;border-top:1px solid rgba(255,255,255,0.15);padding-top:0.45rem;">
+              <div style="color:#F8FAFC;font-size:0.7rem;line-height:1.45;border-top:1px solid rgba(255,255,255,0.15);padding-top:0.5rem;margin-bottom:0.45rem;">
+                {corte['nota']}
+              </div>
+              <div style="color:#94A3B8;font-size:0.68rem;">
                 Cruce generado: <span style="color:#F8FAFC;font-weight:600;">{corte['generado']}</span>
               </div>
             </div>
@@ -322,7 +334,7 @@ def main():
             unsafe_allow_html=True,
         )
         st.caption(
-            "Al subir archivos nuevos y procesar el cruce, este bloque se actualiza."
+            "Habitable se actualiza con cada descarga nueva; 1×10 permanece en el corte indicado hasta nueva carga."
         )
         st.divider()
         st.markdown("### Panorama nacional")

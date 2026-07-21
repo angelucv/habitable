@@ -16,6 +16,7 @@ data/uploads/*
 # Parquet generados fuera del seed (por si aparecen en otras rutas)
 # El seed de producción SÍ se versiona en data/processed/
 data/uploads/**/*.parquet
+data/processed/solicitudes_1x10_corte_*.parquet
 
 # Streamlit / secretos
 .streamlit/secrets.toml

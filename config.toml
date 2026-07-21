@@ -1,8 +1,11 @@
-# Rutas F0 — archivos actuales en Descargas (ajustar si cambian)
+# Rutas F0 — fuentes locales (ajustar por máquina)
 [sources]
-solicitudes_1x10 = 'C:/Users/Angel/Downloads/Sin título 1x10.xlsx'
-inspecciones_habitable = 'C:/Users/Angel/Downloads/habitable_inspecciones_2026-07-20_22-11-06.csv'
+solicitudes_1x10 = 'data/processed/solicitudes.parquet'
+inspecciones_habitable = 'data/uploads/inspecciones_habitable.csv'
 habitable_sheet = 'Inspecciones'
+corte_1x10_etiqueta = '17/07/2026'
+corte_habitable_etiqueta = '21/07/2026 · descarga ~10:00'
+corte_nota = 'Habitable actualizado al corte descargado el 21/07/2026 a las 10:00. La información de 1×10 corresponde al corte del 17/07/2026 (semana previa).'
 
 [matching]
 # Radio en metros para match geo 1×10 ↔ Habitable

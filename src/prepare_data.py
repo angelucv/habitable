@@ -36,6 +36,63 @@ def load_config() -> dict:
 
 
 def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
+    src = Path(path)
+    if src.suffix.lower() == ".parquet":
+        # Reusar corte 1×10 ya materializado (sin Excel fuente en esta máquina)
+        df = pd.read_parquet(src)
+        drop_cols = [
+            "match_cat",
+            "match_dist_m",
+            "match_score",
+            "hab_id",
+            "hab_nombre",
+            "hab_etiqueta",
+            "dedup_key",
+            "n_reportes",
+            "codigos_grupo",
+            "es_representante",
+        ]
+        df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
+        for col in ("codigo_caso", "cedula", "denunciante", "telefono", "telefono_alt"):
+            if col not in df.columns:
+                df[col] = ""
+            else:
+                df[col] = df[col].fillna("").astype(str).str.strip()
+        if "lat" not in df.columns or "lng" not in df.columns:
+            df["lat"] = df.get("lat_raw", pd.Series([None] * len(df))).map(
+                lambda v: parse_coord(v, "lat")
+            )
+            df["lng"] = df.get("lng_raw", pd.Series([None] * len(df))).map(
+                lambda v: parse_coord(v, "lng")
+            )
+        if "nombre_n" not in df.columns:
+            df["nombre_n"] = df.get("direccion", pd.Series([""] * len(df))).map(normalize_name)
+        if "estado_n" not in df.columns:
+            df["estado_n"] = df.get("estado", pd.Series([""] * len(df))).map(normalize_estado)
+        if "municipio_n" not in df.columns:
+            df["municipio_n"] = (
+                df.get("municipio", pd.Series([""] * len(df))).fillna("").astype(str).str.upper().str.strip()
+            )
+        if "parroquia_n" not in df.columns:
+            df["parroquia_n"] = (
+                df.get("parroquia", pd.Series([""] * len(df))).fillna("").astype(str).str.upper().str.strip()
+            )
+        if "mapeable" not in df.columns:
+            df["mapeable"] = df.apply(
+                lambda r: in_venezuela(r["lat"], r["lng"], geo_cfg), axis=1
+            )
+        if "mapa_ok" not in df.columns:
+            df["mapa_ok"] = [
+                mapa_ok_flag(lat, lng, est, geo_cfg)
+                for lat, lng, est in zip(df["lat"], df["lng"], df["estado_n"])
+            ]
+        if "calidad_geo" not in df.columns:
+            df["calidad_geo"] = [
+                quality_flag(lat, lng, geo_cfg, est)
+                for lat, lng, est in zip(df["lat"], df["lng"], df["estado_n"])
+            ]
+        return df
+
     df = pd.read_excel(path, dtype=str)
     # Normaliza encabezados (espacios / puntos) antes del rename
     df.columns = (
@@ -287,6 +344,9 @@ def run_pipeline(
     habitable_path: str | Path | None = None,
     habitable_sheet: str | None = None,
     quiet: bool = False,
+    corte_1x10_etiqueta: str | None = None,
+    corte_habitable_etiqueta: str | None = None,
+    corte_nota: str | None = None,
 ) -> dict:
     """Ejecuta limpieza + matching + parquet. Retorna summary."""
     cfg = load_config()
@@ -346,6 +406,25 @@ def run_pipeline(
     summary["corte_habitable_archivo"] = Path(hab_src).name
     summary["corte_1x10_n"] = int(len(sol))
     summary["corte_habitable_n"] = int(len(hab))
+    summary["corte_1x10_etiqueta"] = (
+        corte_1x10_etiqueta
+        or sources.get("corte_1x10_etiqueta")
+        or "17/07/2026"
+    )
+    summary["corte_habitable_etiqueta"] = (
+        corte_habitable_etiqueta
+        or sources.get("corte_habitable_etiqueta")
+        or ""
+    )
+    summary["corte_nota"] = (
+        corte_nota
+        or sources.get("corte_nota")
+        or (
+            "Habitable actualizado al corte descargado el 21/07/2026 a las 10:00. "
+            "La información de 1×10 corresponde al corte del 17/07/2026 "
+            "(semana previa)."
+        )
+    )
 
     OUT.mkdir(parents=True, exist_ok=True)
     sol_path = OUT / "solicitudes.parquet"
@@ -472,7 +551,25 @@ def run_pipeline(
 
 
 def main() -> None:
-    summary = run_pipeline(quiet=False)
+    import argparse
+
+    p = argparse.ArgumentParser(description="Materializa parquet cruce 1×10 × Habitable")
+    p.add_argument("--solicitudes", default=None)
+    p.add_argument("--habitable", default=None)
+    p.add_argument("--habitable-sheet", default=None)
+    p.add_argument("--corte-1x10", default=None, help="Etiqueta legible corte 1×10")
+    p.add_argument("--corte-habitable", default=None, help="Etiqueta legible corte Habitable")
+    p.add_argument("--corte-nota", default=None, help="Nota sidebar Corte de información")
+    args = p.parse_args()
+    summary = run_pipeline(
+        solicitudes_path=args.solicitudes,
+        habitable_path=args.habitable,
+        habitable_sheet=args.habitable_sheet,
+        quiet=False,
+        corte_1x10_etiqueta=args.corte_1x10,
+        corte_habitable_etiqueta=args.corte_habitable,
+        corte_nota=args.corte_nota,
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 

@@ -1,9 +1,9 @@
 {
   "origen": "precarga_despliegue",
-  "generado_en": "2026-07-18T02:30:19+00:00",
-  "nota": "Sustituible al subir Excel nuevos y procesar el cruce en la UI.",
+  "generado_en": "2026-07-21T14:27:00-04:00",
+  "nota": "Habitable corte 21/07/2026 ~10:00 (descarga). 1×10 corte 17/07/2026.",
   "n_1x10": 33251,
-  "n_hab": 9865,
-  "coincide_auto": 1834,
-  "solo_1x10": 28319
+  "n_hab": 17392,
+  "coincide_auto": 4649,
+  "solo_1x10": 22432
 }
