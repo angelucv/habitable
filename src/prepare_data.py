@@ -25,6 +25,12 @@ from geo_utils import (  # noqa: E402
     quality_flag,
 )
 from dedupe_1x10 import dedupe_solicitudes, resumen_dedupe  # noqa: E402
+from text_encoding import (  # noqa: E402
+    TEXT_COLS_1X10,
+    TEXT_COLS_HAB,
+    encoding_fix_stats,
+    fix_dataframe_text,
+)
 
 R_EARTH = 6_371_000.0
 OUT = ROOT / "data" / "processed"
@@ -36,63 +42,6 @@ def load_config() -> dict:
 
 
 def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
-    src = Path(path)
-    if src.suffix.lower() == ".parquet":
-        # Reusar corte 1×10 ya materializado (sin Excel fuente en esta máquina)
-        df = pd.read_parquet(src)
-        drop_cols = [
-            "match_cat",
-            "match_dist_m",
-            "match_score",
-            "hab_id",
-            "hab_nombre",
-            "hab_etiqueta",
-            "dedup_key",
-            "n_reportes",
-            "codigos_grupo",
-            "es_representante",
-        ]
-        df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
-        for col in ("codigo_caso", "cedula", "denunciante", "telefono", "telefono_alt"):
-            if col not in df.columns:
-                df[col] = ""
-            else:
-                df[col] = df[col].fillna("").astype(str).str.strip()
-        if "lat" not in df.columns or "lng" not in df.columns:
-            df["lat"] = df.get("lat_raw", pd.Series([None] * len(df))).map(
-                lambda v: parse_coord(v, "lat")
-            )
-            df["lng"] = df.get("lng_raw", pd.Series([None] * len(df))).map(
-                lambda v: parse_coord(v, "lng")
-            )
-        if "nombre_n" not in df.columns:
-            df["nombre_n"] = df.get("direccion", pd.Series([""] * len(df))).map(normalize_name)
-        if "estado_n" not in df.columns:
-            df["estado_n"] = df.get("estado", pd.Series([""] * len(df))).map(normalize_estado)
-        if "municipio_n" not in df.columns:
-            df["municipio_n"] = (
-                df.get("municipio", pd.Series([""] * len(df))).fillna("").astype(str).str.upper().str.strip()
-            )
-        if "parroquia_n" not in df.columns:
-            df["parroquia_n"] = (
-                df.get("parroquia", pd.Series([""] * len(df))).fillna("").astype(str).str.upper().str.strip()
-            )
-        if "mapeable" not in df.columns:
-            df["mapeable"] = df.apply(
-                lambda r: in_venezuela(r["lat"], r["lng"], geo_cfg), axis=1
-            )
-        if "mapa_ok" not in df.columns:
-            df["mapa_ok"] = [
-                mapa_ok_flag(lat, lng, est, geo_cfg)
-                for lat, lng, est in zip(df["lat"], df["lng"], df["estado_n"])
-            ]
-        if "calidad_geo" not in df.columns:
-            df["calidad_geo"] = [
-                quality_flag(lat, lng, geo_cfg, est)
-                for lat, lng, est in zip(df["lat"], df["lng"], df["estado_n"])
-            ]
-        return df
-
     df = pd.read_excel(path, dtype=str)
     # Normaliza encabezados (espacios / puntos) antes del rename
     df.columns = (
@@ -124,6 +73,20 @@ def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
         "DESCRIPCIÓN": "descripcion",
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+    # Encoding: corregir mojibake en crudo antes de geo / tipología / cruce
+    cols_txt = [c for c in TEXT_COLS_1X10 if c in df.columns]
+    # también cualquier otra columna object que haya quedado
+    for c in df.columns:
+        if c not in cols_txt and (
+            df[c].dtype == object or str(df[c].dtype) == "string"
+        ):
+            cols_txt.append(c)
+    before_dir = df["direccion"].copy() if "direccion" in df.columns else None
+    df = fix_dataframe_text(df, cols_txt, keep_raw_for=("direccion", "descripcion"))
+    if before_dir is not None:
+        df.attrs["encoding_direccion"] = encoding_fix_stats(
+            before_dir, df["direccion"]
+        )
     # Contacto: no perder identidad del caso ni del denunciante
     for col in ("codigo_caso", "cedula", "denunciante", "telefono", "telefono_alt"):
         if col not in df.columns:
@@ -156,6 +119,18 @@ def prepare_habitable(path: str, sheet: str, geo_cfg: dict) -> pd.DataFrame:
         df = pd.read_csv(src, dtype=str, encoding="utf-8")
     else:
         df = pd.read_excel(src, sheet_name=sheet, dtype=str)
+    cols_txt = [c for c in TEXT_COLS_HAB if c in df.columns]
+    for c in df.columns:
+        if c not in cols_txt and (
+            df[c].dtype == object or str(df[c].dtype) == "string"
+        ):
+            # no tocar ids numéricos guardados como str si no parecen texto libre
+            if c in ("id", "lat", "lng", "num_pisos"):
+                continue
+            cols_txt.append(c)
+    df = fix_dataframe_text(
+        df, cols_txt, keep_raw_for=("direccion", "nombre_edificacion")
+    )
     df["lat"] = df["lat"].map(lambda v: parse_coord(v, "lat"))
     df["lng"] = df["lng"].map(lambda v: parse_coord(v, "lng"))
     df["nombre_n"] = df["nombre_edificacion"].map(normalize_name)
@@ -344,9 +319,6 @@ def run_pipeline(
     habitable_path: str | Path | None = None,
     habitable_sheet: str | None = None,
     quiet: bool = False,
-    corte_1x10_etiqueta: str | None = None,
-    corte_habitable_etiqueta: str | None = None,
-    corte_nota: str | None = None,
 ) -> dict:
     """Ejecuta limpieza + matching + parquet. Retorna summary."""
     cfg = load_config()
@@ -364,6 +336,13 @@ def run_pipeline(
 
     _log("Cargando 1×10…")
     sol = prepare_solicitudes(sol_src, geo)
+    enc_dir = dict(getattr(sol, "attrs", {}).get("encoding_direccion") or {})
+    if enc_dir:
+        _log(
+            f"Encoding direcciones: {enc_dir.get('cambiadas', 0)} corregidas "
+            f"(mojibake {enc_dir.get('mojibake_antes', 0)} → "
+            f"{enc_dir.get('mojibake_despues', 0)})"
+        )
     _log("Cargando Habitable…")
     hab_src_path = Path(hab_src)
     try:
@@ -389,9 +368,13 @@ def run_pipeline(
         score_medium=int(match_cfg["name_score_medium"]),
         score_geo_min=int(match_cfg.get("name_score_geo_min", 40)),
     )
-    _log("Deduplicando ubicaciones 1×10…")
+    _log("Deduplicando ubicaciones 1×10 (GPS + dirección + tipología)…")
     sol = dedupe_solicitudes(
-        sol, radius_m=float(match_cfg.get("dedupe_radius_m", 20))
+        sol,
+        radius_m=float(match_cfg.get("dedupe_radius_m", 10)),
+        addr_score_min=float(match_cfg.get("dedupe_addr_min", 75)),
+        auto_merge_m=float(match_cfg.get("dedupe_auto_m", 3)),
+        auto_addr_min=float(match_cfg.get("dedupe_auto_addr_min", 55)),
     )
     summary = build_summary(sol, hab, float(match_cfg["radius_m"]))
     summary.update(resumen_dedupe(sol))
@@ -406,25 +389,12 @@ def run_pipeline(
     summary["corte_habitable_archivo"] = Path(hab_src).name
     summary["corte_1x10_n"] = int(len(sol))
     summary["corte_habitable_n"] = int(len(hab))
-    summary["corte_1x10_etiqueta"] = (
-        corte_1x10_etiqueta
-        or sources.get("corte_1x10_etiqueta")
-        or "17/07/2026"
-    )
-    summary["corte_habitable_etiqueta"] = (
-        corte_habitable_etiqueta
-        or sources.get("corte_habitable_etiqueta")
-        or ""
-    )
-    summary["corte_nota"] = (
-        corte_nota
-        or sources.get("corte_nota")
-        or (
-            "Habitable actualizado al corte descargado el 21/07/2026 a las 10:00. "
-            "La información de 1×10 corresponde al corte del 17/07/2026 "
-            "(semana previa)."
+    if enc_dir:
+        summary["encoding_direccion"] = enc_dir
+    elif "direccion_raw" in sol.columns and "direccion" in sol.columns:
+        summary["encoding_direccion"] = encoding_fix_stats(
+            sol["direccion_raw"], sol["direccion"]
         )
-    )
 
     OUT.mkdir(parents=True, exist_ok=True)
     sol_path = OUT / "solicitudes.parquet"
@@ -450,7 +420,9 @@ def run_pipeline(
             "parroquia",
             "parroquia_n",
             "direccion",
+            "direccion_raw",
             "descripcion",
+            "descripcion_raw",
             "lat_raw",
             "lng_raw",
             "lat",
@@ -468,6 +440,16 @@ def run_pipeline(
             "n_reportes",
             "codigos_grupo",
             "es_representante",
+            "dedupe_radius_m",
+            "dedupe_addr_min",
+            "dedupe_auto_m",
+            "dedupe_auto_addr_min",
+            "nota_agrupacion",
+            "tipo_dir",
+            "unidad_dir",
+            "tipo_ubicacion",
+            "direccion_display",
+            "score_dir_rep",
         ]
         if c in sol.columns
     ]
@@ -478,7 +460,9 @@ def run_pipeline(
             "etiqueta",
             "etiqueta_n",
             "nombre_edificacion",
+            "nombre_edificacion_raw",
             "direccion",
+            "direccion_raw",
             "estado",
             "estado_n",
             "municipio",
@@ -551,25 +535,7 @@ def run_pipeline(
 
 
 def main() -> None:
-    import argparse
-
-    p = argparse.ArgumentParser(description="Materializa parquet cruce 1×10 × Habitable")
-    p.add_argument("--solicitudes", default=None)
-    p.add_argument("--habitable", default=None)
-    p.add_argument("--habitable-sheet", default=None)
-    p.add_argument("--corte-1x10", default=None, help="Etiqueta legible corte 1×10")
-    p.add_argument("--corte-habitable", default=None, help="Etiqueta legible corte Habitable")
-    p.add_argument("--corte-nota", default=None, help="Nota sidebar Corte de información")
-    args = p.parse_args()
-    summary = run_pipeline(
-        solicitudes_path=args.solicitudes,
-        habitable_path=args.habitable,
-        habitable_sheet=args.habitable_sheet,
-        quiet=False,
-        corte_1x10_etiqueta=args.corte_1x10,
-        corte_habitable_etiqueta=args.corte_habitable,
-        corte_nota=args.corte_nota,
-    )
+    summary = run_pipeline(quiet=False)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 

@@ -92,7 +92,14 @@ Para cada solicitud mapeable:
 
 ### 3.4 Deduplicación espacial 1×10
 
-Varias personas pueden reportar el mismo edificio. Se agrupan puntos a `dedupe_radius_m` (20 m) y se guarda un representante con `n_reportes`.
+Varias personas pueden reportar el mismo sitio. Criterio **estricto** (orientado a visita casa/edificio):
+
+- radio GPS ≤ `dedupe_radius_m` (10 m) y dirección similar (≥ `dedupe_addr_min`);
+- pin ≤ `dedupe_auto_m` aún exige similitud mínima de texto;
+- tipología léxica (casa / edificio / apto) y **mismo número de casa/apto** si aparece;
+- encoding corregido al cargar (`nÃºmero` → `número`) antes del análisis.
+
+Se guarda un representante con `n_reportes` / `direccion_display`. El cúmulo **no** sustituye la visita caso a caso.
 
 ### 3.5 Salida
 
@@ -139,7 +146,10 @@ Cualquier usuario autenticado puede subir nuevos Excel y regenerar el cruce; las
 | `matching.name_score_high` | 85 | Umbral match alta |
 | `matching.name_score_medium` | 70 | Umbral match media |
 | `matching.name_score_geo_min` | 40 | Mínimo para “dudoso” |
-| `matching.dedupe_radius_m` | 20 | Unificación de reportes 1×10 |
+| `matching.dedupe_radius_m` | 10 | Unificación estricta de reportes 1×10 |
+| `matching.dedupe_addr_min` | 75 | Similitud mínima de dirección |
+| `matching.dedupe_auto_m` | 3 | Pin casi idéntico (sigue exigiendo texto) |
+| `matching.dedupe_auto_addr_min` | 55 | Similitud mínima en pin corto |
 | `geo.hotspot_*` | pin Libertador | Exclusión de confianza |
 
 ---

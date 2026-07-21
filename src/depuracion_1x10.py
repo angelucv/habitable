@@ -181,14 +181,29 @@ def enrich_habitable_cruce(df: pd.DataFrame) -> pd.DataFrame:
         out["fila_es_caso_individual"] = True
     if "n_reportes" in out.columns:
         out["casos_cerca_misma_ubicacion"] = out["n_reportes"]
+        r = 10
+        if "dedupe_radius_m" in out.columns and len(out):
+            try:
+                r = float(out["dedupe_radius_m"].iloc[0])
+            except Exception:
+                pass
+        a = 75
+        if "dedupe_addr_min" in out.columns and len(out):
+            try:
+                a = float(out["dedupe_addr_min"].iloc[0])
+            except Exception:
+                pass
         out["nota_ubicacion"] = out["n_reportes"].map(
             lambda n: (
-                f"Hay {int(n)} reportes 1×10 cerca (≤20 m); "
-                "cada fila sigue siendo un caso distinto a contactar."
+                f"Hay {int(n)} reportes 1×10 agrupados (≤{r:.0f} m y dirección "
+                f"similar ≥{a:.0f}). Puede ser más de una casa/edificio: "
+                "cada fila sigue siendo un caso distinto a contactar/visitar."
                 if pd.notna(n) and int(n) > 1
-                else "Caso único en su ubicación."
+                else "Caso único en su ubicación (criterio estricto)."
             )
         )
+        if "nota_agrupacion" in out.columns:
+            out["nota_ubicacion"] = out["nota_agrupacion"].fillna(out["nota_ubicacion"])
     return out
 
 
@@ -241,7 +256,7 @@ def resumen_depuracion(sol: pd.DataFrame, summary: dict | None = None) -> dict:
         "match_cat": cats,
         "hab_etiqueta_cruzados": hab_eti,
         "radius_m": summary.get("radius_m", 50),
-        "dedupe_radius_m": summary.get("dedupe_radius_m", 20),
+        "dedupe_radius_m": summary.get("dedupe_radius_m", 10),
         "ubicaciones_unicas": summary.get("ubicaciones_unicas"),
         "ubicaciones_con_multiples_reportes": summary.get(
             "ubicaciones_con_multiples_reportes"

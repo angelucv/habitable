@@ -11,13 +11,11 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-from streamlit_echarts import st_echarts
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 DATA = ROOT / "data" / "processed"
 
-from charts_echarts import bar_vertical  # noqa: E402
 from data_ingest import render_upload_panel  # noqa: E402
 from map_robust import render_map_ui  # noqa: E402
 from pages_analysis import (  # noqa: E402
@@ -25,11 +23,10 @@ from pages_analysis import (  # noqa: E402
     page_habitable,
     page_reportes_inspecciones,
 )
+from pages_caracteristicas import page_info_1x10, page_info_habitable  # noqa: E402
 from ui_theme import (  # noqa: E402
     inject_executive_css,
     render_hero,
-    render_kpi_strip,
-    render_section,
 )
 
 
@@ -89,34 +86,38 @@ def _label_corte(summary: dict) -> dict:
     }
 
 
-def page_mapa(sol: pd.DataFrame, hab: pd.DataFrame, summary: dict):
-    render_section(
-        "Mapa operativo",
-        "Cruce espacial de solicitudes 1×10 con inspecciones Habitable. "
-        f"Radio {summary.get('radius_m', 50)} m · unificación {summary.get('dedupe_radius_m', 20)} m.",
+def page_mapa(sol: pd.DataFrame, hab: pd.DataFrame, summary: dict, sub: str = "mapa_vista"):
+    """Mapa operativo: vista de mapa (las características van en otra pestaña)."""
+    st.caption(
+        f"Cruce 1×10 × Habitable · radio {summary.get('radius_m', 50)} m · "
+        f"unificación {summary.get('dedupe_radius_m', 10)} m "
+        f"(estricto + dirección)"
     )
 
     estados_sol = sorted(sol["estado_n"].dropna().unique().tolist())
-    f1, f2 = st.columns([3, 2])
+    f1, f2, f3 = st.columns([2.4, 1.2, 1.2])
     with f1:
         estados = st.multiselect(
-            "Territorio (vacío = nacional)",
+            "Territorio",
             options=estados_sol,
             default=[],
-            help="Vacío = país completo. Acota a Caracas / La Guaira / Miranda para enfocarte.",
+            key="map_op_est",
+            help="Vacío = nacional.",
         )
     with f2:
-        with st.expander("Filtros avanzados", expanded=False):
-            hide_bad = st.checkbox(
-                "Ocultar GPS dudosos (mar / fuera de estado)",
-                value=False,
-                help="Limpia puntos en el Caribe. Reduce el volumen mostrado.",
-            )
-            show_all_reports = st.checkbox(
-                "Sin unificar ubicaciones (todos los reportes)",
-                value=False,
-                help=f"Por defecto se unifica a {summary.get('dedupe_radius_m', 20)} m.",
-            )
+        hide_bad = st.checkbox(
+            "Ocultar GPS dudosos",
+            value=True,
+            key="map_op_hide_bad",
+            help="Oculta mar / fuera de estado.",
+        )
+    with f3:
+        show_all_reports = st.checkbox(
+            "Sin unificar",
+            value=False,
+            key="map_op_all",
+            help="Todos los reportes (no solo ubicación).",
+        )
 
     sol_f = filter_estado(sol, estados) if estados else sol
     hab_f = filter_estado(hab, estados) if estados else hab
@@ -127,7 +128,6 @@ def page_mapa(sol: pd.DataFrame, hab: pd.DataFrame, summary: dict):
         n_ocultos = int((~sol_geo["mapa_ok"]).sum())
         sol_geo = sol_geo[sol_geo["mapa_ok"]]
 
-    n_brutos = len(sol_geo)
     if not show_all_reports and "es_representante" in sol_geo.columns:
         sol_geo = sol_geo[sol_geo["es_representante"]]
         n_multi = (
@@ -149,130 +149,15 @@ def page_mapa(sol: pd.DataFrame, hab: pd.DataFrame, summary: dict):
     solo = sol_map[sol_map["match_cat"] == "solo_1x10"]
     dud = sol_map[sol_map["match_cat"] == "coincide_geo_solo"]
 
-    render_kpi_strip(
-        [
-            {"label": "Solicitudes 1×10", "value": fmt_num(len(sol_map)), "tone": "info"},
-            {
-                "label": "Inspecciones",
-                "value": fmt_num(len(hab_map)),
-                "tone": "success",
-            },
-            {
-                "label": "Ya atendidas",
-                "value": fmt_num(len(coin)),
-                "tone": "info",
-                "hint": "Coincidencia alta + media",
-            },
-            {
-                "label": "Pendientes",
-                "value": fmt_num(len(solo)),
-                "tone": "warning",
-            },
-            {"label": "Por revisar", "value": fmt_num(len(dud)), "tone": "muted"},
-        ]
-    )
     st.caption(
-        f"Universo mostrado: {fmt_num(len(sol_map))} ubicaciones "
-        f"(de {fmt_num(n_brutos)} reportes"
-        + (f"; sitios con varios reportes: {fmt_num(n_multi)}" if n_multi else "")
-        + ")."
-        + (f" GPS dudosos ocultos: {fmt_num(n_ocultos)}." if n_ocultos else "")
+        f"**{fmt_num(len(sol_map))}** ubic. · **{fmt_num(len(hab_map))}** insp. · "
+        f"**{fmt_num(len(coin))}** atendidas · **{fmt_num(len(solo))}** pendientes · "
+        f"**{fmt_num(len(dud))}** por revisar"
+        + (f" · multi {fmt_num(n_multi)}" if n_multi else "")
+        + (f" · GPS ocultos {fmt_num(n_ocultos)}" if n_ocultos else "")
     )
 
     render_map_ui(sol_map, hab_map, coin, solo, dud)
-
-    render_section("Embudo del cruce", "Volumen según el filtro territorial actual.")
-    funnel_cats = [
-        "Solicitudes",
-        "En mapa",
-        "Ya atendidas",
-        "Pendientes",
-        "Por revisar",
-    ]
-    funnel_vals = [
-        int(len(sol_f)),
-        int(len(sol_map)),
-        int(len(coin)),
-        int(len(solo)),
-        int(len(dud)),
-    ]
-    st_echarts(
-        bar_vertical("Casos", funnel_cats, funnel_vals),
-        height="280px",
-        key="map_funnel",
-    )
-
-    render_section("Cruce por estado", "Desglose de solicitudes 1×10 visibles en el mapa.")
-    if "estado_n" in sol_map.columns and "match_cat" in sol_map.columns:
-        g = (
-            sol_map.groupby("estado_n")["match_cat"]
-            .value_counts()
-            .unstack(fill_value=0)
-        )
-        for col in [
-            "solo_1x10",
-            "coincide_alta",
-            "coincide_media",
-            "coincide_geo_solo",
-        ]:
-            if col not in g.columns:
-                g[col] = 0
-        g = g[
-            ["solo_1x10", "coincide_alta", "coincide_media", "coincide_geo_solo"]
-        ]
-        g = g.sort_values("solo_1x10", ascending=False).head(12)
-        g = g.rename(
-            columns={
-                "solo_1x10": "Pendientes",
-                "coincide_alta": "Alta",
-                "coincide_media": "Media",
-                "coincide_geo_solo": "Por revisar",
-            }
-        )
-        g.index.name = "Estado"
-        st.dataframe(g, use_container_width=True)
-
-    with st.expander("Calidad geográfica 1×10"):
-        if "calidad_geo" in sol_f.columns:
-            vc = sol_f["calidad_geo"].value_counts()
-            st_echarts(
-                bar_vertical("Calidad geo", vc.index.tolist(), vc.values.tolist()),
-                height="320px",
-                key="map_calidad",
-            )
-
-    with st.expander("Muestra de coincidencias altas"):
-        cols = [
-            c
-            for c in [
-                "codigo_caso",
-                "direccion",
-                "hab_nombre",
-                "match_dist_m",
-                "match_score",
-                "hab_etiqueta",
-                "estado_n",
-            ]
-            if c in coin.columns
-        ]
-        alta = coin[coin["match_cat"] == "coincide_alta"][cols].head(30)
-        st.dataframe(alta, use_container_width=True)
-
-
-def render_main_tabs() -> str:
-    """Pestañas principales del tablero."""
-    from ui_theme import render_section_tabs
-
-    return render_section_tabs(
-        [
-            ("mapa", "Mapa operativo"),
-            ("x10", "Análisis 1×10"),
-            ("hab", "Análisis Habitable"),
-            ("reportes", "1×10 pendientes"),
-        ],
-        state_key="vista",
-        heading="Pestañas del tablero",
-    )
 
 def main():
     st.set_page_config(
@@ -282,6 +167,12 @@ def main():
         initial_sidebar_state="expanded",
     )
     inject_executive_css()
+
+    from nav_schema import HOME_ID, find_section, resolve_nav
+    from ui_theme import render_home_index, render_section, render_section_subtabs, render_sidebar_nav
+
+    if "nav_item" not in st.session_state:
+        st.session_state["nav_item"] = HOME_ID
 
     if not ensure_data_ready():
         st.warning(
@@ -305,6 +196,9 @@ def main():
     sol, hab, summary = load_data()
 
     with st.sidebar:
+        active = render_sidebar_nav(st.session_state["nav_item"])
+        st.session_state["nav_item"] = active
+        st.divider()
         corte = _label_corte(summary)
         st.markdown("### Corte de información")
         st.markdown(
@@ -363,7 +257,8 @@ def main():
         )
         st.caption(
             f"Matching a {summary.get('radius_m')} m · "
-            f"Unificación {summary.get('dedupe_radius_m', 20)} m"
+            f"Unificación {summary.get('dedupe_radius_m', 10)} m "
+            f"+ dir≥{summary.get('dedupe_addr_min', 75)}"
         )
         st.divider()
         if summary.get("ubicaciones_unicas"):
@@ -390,15 +285,34 @@ def main():
             unsafe_allow_html=True,
         )
 
-    vista = render_main_tabs()
-    if vista == "mapa":
-        page_mapa(sol, hab, summary)
-    elif vista == "x10":
-        page_1x10(sol, summary)
-    elif vista == "reportes":
-        page_reportes_inspecciones(sol, summary)
+    nav_item = st.session_state.get("nav_item", HOME_ID)
+    sec_id, item_id = resolve_nav(nav_item)
+    if sec_id == HOME_ID:
+        render_home_index(summary, hab)
+        return
+
+    sec = find_section(sec_id)
+    if not sec:
+        render_home_index(summary, hab)
+        return
+
+    render_section(sec.label, sec.blurb)
+    item_id = render_section_subtabs(sec)
+    st.session_state["nav_item"] = item_id
+
+    if sec_id == "fuentes":
+        if item_id == "fuentes_hab":
+            page_info_habitable(hab, summary)
+        else:
+            page_info_1x10(sol, summary)
+    elif sec_id == "mapa":
+        page_mapa(sol, hab, summary, sub=item_id)
+    elif sec_id == "x10":
+        page_1x10(sol, summary, sub=item_id)
+    elif sec_id == "pend":
+        page_reportes_inspecciones(sol, summary, sub=item_id)
     else:
-        page_habitable(hab, summary)
+        page_habitable(hab, summary, sub=item_id)
 
 
 if __name__ == "__main__":

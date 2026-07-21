@@ -67,16 +67,23 @@ def _seccion_depuracion_1x10(sol: pd.DataFrame, summary: dict) -> None:
     with st.expander("Cómo se depuró la información", expanded=False):
         st.markdown(
             f"""
-1. **Coordenadas** — se interpretan latitud/longitud (separadores, signos) y se
+1. **Encoding** — se corrige mojibake en textos crudos (p. ej. «nÃºmero» →
+   «número») antes del resto del análisis; `direccion` queda depurada
+   (`direccion_raw` conserva el original).
+2. **Coordenadas** — se interpretan latitud/longitud (separadores, signos) y se
    valida que caigan en Venezuela.
-2. **Calidad GPS** — se marcan puntos en mar abierto, fuera del estado declarado
+3. **Calidad GPS** — se marcan puntos en mar abierto, fuera del estado declarado
    o sin coordenadas (`calidad_geo`).
-3. **Territorio** — estado / municipio / parroquia se normalizan (mayúsculas,
+4. **Territorio** — estado / municipio / parroquia se normalizan (mayúsculas,
    espacios) para filtros y mapas.
-4. **Cruce Habitable** — vecinos a ≤ {r['radius_m']:.0f} m + similitud de
+5. **Cruce Habitable** — vecinos a ≤ {r['radius_m']:.0f} m + similitud de
    dirección/nombre; se clasifica atendida, pendiente o por revisar.
-5. **Unificación** — reportes a ≤ {r['dedupe_radius_m']:.0f} m se agrupan en una
-   ubicación representativa (`n_reportes`, `es_representante`).
+6. **Unificación (estricto)** — reportes a ≤ {r['dedupe_radius_m']:.0f} m **y**
+   dirección similar se agrupan si la tipología léxica es coherente
+   (no mezcla casa↔edificio; no une apto/casa con número distinto).
+   El **representante** muestra la dirección más completa del grupo
+   (`direccion_display`). Sirve para mapa/cúmulo; **no** sustituye la visita
+   caso a caso.
 
 El archivo descargable conserva el **dato original** (cuando está disponible) y
 añade columnas depuradas, **si cruzó con Habitable**, el **estatus de la
@@ -171,7 +178,9 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
         "No se agrupa por edificio: si varios reportes caen en la misma "
         "ubicación, cada caso sigue saliendo aparte. "
         "También: `estatus_para_contacto`, `en_cola_pendiente`, "
-        "`cruzado_con_habitable`, `estatus_inspeccion_habitable`."
+        "`cruzado_con_habitable`, `estatus_inspeccion_habitable`. "
+        "La columna `direccion` ya viene con encoding corregido "
+        "(`direccion_raw` = original)."
     )
     _contact_cols = [
         c for c in ("codigo_caso", "denunciante", "telefono") if c in sol.columns
@@ -183,9 +192,10 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
             "completo para no perder identidad del caso."
         )
     st.info(
-        "La unificación a 20 m solo sirve para mapa/estadísticas. "
-        "Para la cola de 1×10 (informar atendido / pendiente) usa siempre "
-        "esta descarga caso a caso."
+        "La unificación (GPS corto + dirección similar) solo sirve para "
+        "mapa/estadísticas. Para Habitable e informar atendido/pendiente usa "
+        "siempre la descarga **caso a caso**: el cúmulo puede agrupar vecinos "
+        "afines y no garantiza una sola casa/edificio."
     )
 
     estados_all = sorted(sol["estado_n"].dropna().unique().tolist()) if "estado_n" in sol.columns else []
@@ -343,16 +353,29 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
         st.warning(f"No se pudo generar el Excel depurado: {exc}")
 
 
-def page_1x10(sol: pd.DataFrame, summary: dict):
+def page_1x10(sol: pd.DataFrame, summary: dict, sub: str = "x10_analisis"):
     from ui_theme import render_kpi_strip, render_section
 
-    render_section(
-        "Análisis 1×10",
-        "Demanda ciudadana: volumen, territorio y estado frente a Habitable. "
-        f"Ubicaciones unificadas a {summary.get('dedupe_radius_m', 20)} m.",
-    )
+    if sub == "x10_depuracion":
+        render_section(
+            "Depuración 1×10",
+            "Limpieza del Excel ciudadano antes del cruce con Habitable.",
+        )
+        _seccion_depuracion_1x10(sol, summary)
+        return
 
-    _seccion_depuracion_1x10(sol, summary)
+    if sub == "x10_cola":
+        render_section(
+            "Cola pendientes",
+            "Casos 1×10 sin cruce Habitable, listos para contacto por código.",
+        )
+    else:
+        render_section(
+            "Territorio y cruce",
+            "Demanda ciudadana: volumen, territorio y estado frente a Habitable. "
+            f"Ubicaciones unificadas a {summary.get('dedupe_radius_m', 10)} m "
+            f"(GPS + dirección; posible agrupación).",
+        )
 
     use_unique = st.toggle(
         "Usar ubicaciones unificadas (recomendado)",
@@ -364,6 +387,58 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
         work = base[base["es_representante"]]
     else:
         work = base
+
+    if sub == "x10_cola":
+        st.markdown("#### Pendientes de atender (cola por código de caso)")
+        st.caption(
+            "Listado **caso a caso** (no unificado). Sirve para contactar por "
+            "`codigo_caso` e indicar a Habitable qué falta por revisar."
+        )
+        estados = st.multiselect(
+            "Filtrar pendientes por estado",
+            options=sorted(base["estado_n"].unique()),
+            default=["DISTRITO CAPITAL", "LA GUAIRA"]
+            if {"DISTRITO CAPITAL", "LA GUAIRA"} <= set(base["estado_n"].unique())
+            else [],
+            key="pend_est",
+        )
+        pend = base[base["match_cat"] == "solo_1x10"].copy()
+        if estados:
+            pend = pend[pend["estado_n"].isin(estados)]
+        show_cols = [
+            c
+            for c in [
+                "codigo_caso",
+                "cedula",
+                "denunciante",
+                "telefono",
+                "telefono_alt",
+                "direccion",
+                "estado_n",
+                "municipio_n",
+                "parroquia_n",
+                "n_reportes",
+                "codigos_grupo",
+                "lat",
+                "lng",
+                "match_cat",
+            ]
+            if c in pend.columns
+        ]
+        st.dataframe(
+            pend[show_cols].head(500), use_container_width=True, hide_index=True
+        )
+        st.caption(
+            f"Mostrando hasta 500 de {fmt_num(len(pend))} casos pendientes "
+            f"(una fila por código)."
+        )
+        st.download_button(
+            "Descargar cola pendiente caso a caso (CSV)",
+            data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
+            file_name="cola_pendiente_1x10_casos.csv",
+            mime="text/csv",
+        )
+        return
 
     alta = int((work["match_cat"] == "coincide_alta").sum())
     media = int((work["match_cat"] == "coincide_media").sum())
@@ -485,54 +560,6 @@ def page_1x10(sol: pd.DataFrame, summary: dict):
         key="x10_parroq",
     )
 
-    st.markdown("#### Pendientes de atender (cola por código de caso)")
-    st.caption(
-        "Listado **caso a caso** (no unificado). Sirve para contactar por "
-        "`codigo_caso` e indicar a Habitable qué falta por revisar."
-    )
-    estados = st.multiselect(
-        "Filtrar pendientes por estado",
-        options=sorted(base["estado_n"].unique()),
-        default=["DISTRITO CAPITAL", "LA GUAIRA"]
-        if {"DISTRITO CAPITAL", "LA GUAIRA"} <= set(base["estado_n"].unique())
-        else [],
-        key="pend_est",
-    )
-    pend = base[base["match_cat"] == "solo_1x10"].copy()
-    if estados:
-        pend = pend[pend["estado_n"].isin(estados)]
-    show_cols = [
-        c
-        for c in [
-            "codigo_caso",
-            "cedula",
-            "denunciante",
-            "telefono",
-            "telefono_alt",
-            "direccion",
-            "estado_n",
-            "municipio_n",
-            "parroquia_n",
-            "n_reportes",
-            "codigos_grupo",
-            "lat",
-            "lng",
-            "match_cat",
-        ]
-        if c in pend.columns
-    ]
-    st.dataframe(pend[show_cols].head(500), use_container_width=True, hide_index=True)
-    st.caption(
-        f"Mostrando hasta 500 de {fmt_num(len(pend))} casos pendientes "
-        f"(una fila por código)."
-    )
-    st.download_button(
-        "Descargar cola pendiente caso a caso (CSV)",
-        data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
-        file_name="cola_pendiente_1x10_casos.csv",
-        mime="text/csv",
-    )
-
 
 def _hab_filters(hab: pd.DataFrame, key_prefix: str) -> pd.DataFrame:
     estados = sorted(hab["estado_n"].dropna().unique().tolist())
@@ -560,8 +587,8 @@ def _hab_filters(hab: pd.DataFrame, key_prefix: str) -> pd.DataFrame:
     return hab_f
 
 
-def page_habitable(hab: pd.DataFrame, summary: dict):
-    from ui_theme import render_kpi_strip, render_section, render_section_tabs
+def page_habitable(hab: pd.DataFrame, summary: dict, sub: str = "hab_matriz"):
+    from ui_theme import render_kpi_strip, render_section
 
     render_section(
         "Análisis Habitable",
@@ -602,24 +629,13 @@ def page_habitable(hab: pd.DataFrame, summary: dict):
         ]
     )
 
-    sec = render_section_tabs(
-        [
-            ("matriz", "Matriz semáforo"),
-            ("ne", "No estructurales"),
-            ("mod", "Estructurales moderados"),
-            ("sev", "Severos y externos"),
-            ("explorar", "Explorar / reportería"),
-        ],
-        state_key="hab_dano",
-        heading="Secciones de análisis Habitable",
-    )
-    if sec == "matriz":
+    if sub == "hab_matriz":
         _tab_matriz_semaforo(hab)
-    elif sec == "explorar":
+    elif sub == "hab_explorar":
         _tab_explorar_pygwalker(hab)
-    elif sec == "ne":
+    elif sub == "hab_ne":
         _tab_no_estructural(hab)
-    elif sec == "mod":
+    elif sub == "hab_mod":
         _tab_moderado(hab)
     else:
         _tab_severo_externo(hab)
@@ -1079,7 +1095,9 @@ def _tab_severo_externo(hab: pd.DataFrame):
         st.dataframe(list_view(alto_ext, 500), use_container_width=True)
 
 
-def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
+def page_reportes_inspecciones(
+    sol: pd.DataFrame, summary: dict, sub: str = "pend_mapa"
+):
     """1×10 pendientes: mapa por ubicación + listado/descargas + diagnóstico."""
     from map_robust import render_pendientes_map_ui
     from reportes_inspecciones import (
@@ -1088,23 +1106,19 @@ def page_reportes_inspecciones(sol: pd.DataFrame, summary: dict):
         frame_ubicaciones_inspeccion,
         resumen_ubicaciones,
     )
-    from ui_theme import render_kpi_strip, render_section, render_section_tabs
+    from ui_theme import render_kpi_strip, render_section
 
     render_section(
         "1×10 pendientes",
         "Ubicaciones agrupadas · filtros + descarga arriba · mapa debajo.",
     )
 
-    sec = render_section_tabs(
-        [
-            ("mapa", "Mapa"),
-            ("listado", "Listado y descargas"),
-            ("descripcion", "Análisis de descripción"),
-            ("diagnostico", "Por qué cruzan pocos"),
-        ],
-        state_key="rep_insp_sec",
-        heading="Secciones",
-    )
+    sec = {
+        "pend_mapa": "mapa",
+        "pend_listado": "listado",
+        "pend_descripcion": "descripcion",
+        "pend_diagnostico": "diagnostico",
+    }.get(sub, "mapa")
 
     # Filtros territoriales compartidos (mapa + listado)
     estados_all = (
@@ -1397,8 +1411,10 @@ una sola vez.
 
     # ---- Listado ----
     st.caption(
-        "Una fila = ubicación · **cantidad_casos** (cúmulo) + **codigos_casos**. "
-        "El cúmulo indica cuántas veces se reportó el punto; no es prioridad."
+        "Una fila ≈ ubicación · **cantidad_casos** (cúmulo) + **codigos_casos**. "
+        "Agrupación estricta (GPS corto + dirección similar). "
+        "**Para Habitable:** puede haber más de una casa/edificio; "
+        "usar los códigos para inspección caso a caso. El cúmulo no es prioridad."
     )
     show_cols = [
         c
@@ -1414,6 +1430,7 @@ una sola vez.
             "lng",
             "estatus_cruce",
             "calidad_geo",
+            "nota_agrupacion",
         ]
         if c in pend.columns
     ]

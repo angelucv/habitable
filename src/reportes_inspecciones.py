@@ -2,12 +2,16 @@
 Reportes operativos para el equipo de inspecciones
 =================================================
 
-Agrupa la demanda 1×10 por ubicación (radio de unificación), de modo que
-cada fila = un punto a visitar, no un denunciante individual.
+Agrupa la demanda 1×10 por ubicación (criterio estricto: GPS corto +
+dirección similar), de modo que cada fila ≈ un punto a priorizar.
+
+Importante para Habitable: el cúmulo puede incluir vecinos afines; no
+garantiza una sola casa/edificio. Revisar siempre los codigos_casos.
 
 Campos clave:
 - cantidad_casos / n_reportes
 - codigos_casos (todos los código_caso del grupo)
+- nota_agrupacion (si está disponible)
 """
 
 from __future__ import annotations
@@ -80,7 +84,7 @@ def frame_ubicaciones_inspeccion(
     """
     Una fila por ubicación (dedup_key): cantidad de casos + todos los códigos.
 
-    Si no hay dedup_key, agrupa por redondeo de coords (aprox. 20 m).
+    Si no hay dedup_key, agrupa por redondeo de coords (aprox. 10 m).
     Por defecto excluye GPS dudosos (mar abierto / fuera de estado).
     """
     if sol is None or sol.empty:
@@ -147,7 +151,11 @@ def frame_ubicaciones_inspeccion(
         c
         for c in [
             key,
+            "direccion_display",
             "direccion",
+            "tipo_ubicacion",
+            "tipo_dir",
+            "unidad_dir",
             "estado_n",
             "municipio_n",
             "parroquia_n",
@@ -161,6 +169,9 @@ def frame_ubicaciones_inspeccion(
             "hab_etiqueta",
             "calidad_geo",
             "mapa_ok",
+            "nota_agrupacion",
+            "dedupe_radius_m",
+            "dedupe_addr_min",
         ]
         if c in reps.columns
     ]
@@ -180,12 +191,20 @@ def frame_ubicaciones_inspeccion(
 
     out["cumulo_casos"] = out["cantidad_casos"].map(
         lambda n: (
-            f"Cúmulo de {int(n)} casos"
+            f"Cúmulo de {int(n)} casos (posible agrupación; revisar en campo)"
             if pd.notna(n) and int(n) > 1
             else "1 caso en el punto"
         )
     )
-    # No usar «prioridad»: el volumen solo indica repetición de reportes
+    if "nota_agrupacion" not in out.columns:
+        out["nota_agrupacion"] = out["cantidad_casos"].map(
+            lambda n: (
+                "Varios reportes agrupados con GPS corto + dirección similar. "
+                "Puede haber más de una casa/edificio: usar codigos_casos."
+                if pd.notna(n) and int(n) > 1
+                else "Caso único en ubicación (criterio estricto)."
+            )
+        )
 
     # Orden operativo: más reportes primero (volumen, no prioridad normativa)
     out = out.sort_values(
@@ -200,6 +219,9 @@ def frame_ubicaciones_inspeccion(
             "cumulo_casos",
             "cantidad_casos",
             "codigos_casos",
+            "nota_agrupacion",
+            "tipo_ubicacion",
+            "direccion_display",
             "direccion",
             "estado_n",
             "municipio_n",
@@ -258,8 +280,11 @@ def excel_bytes_reportes_inspeccion(
                     "hoja": "pendientes_por_ubicacion",
                     "contenido": (
                         "Ubicaciones 1×10 sin cruce útil con Habitable. "
-                        "Una fila = un punto a visitar; cantidad_casos y "
-                        "codigos_casos agrupan vecinos/reportes repetidos."
+                        "Una fila ≈ punto a priorizar; cantidad_casos y "
+                        "codigos_casos agrupan reportes cercanos CON dirección "
+                        "y tipología coherentes. direccion_display es la más "
+                        "completa del grupo. Puede haber más de una "
+                        "casa/edificio: revisar cada codigo_caso en campo."
                     ),
                 },
                 {

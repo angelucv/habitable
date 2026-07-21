@@ -1,9 +1,11 @@
-{
-  "origen": "precarga_despliegue",
-  "generado_en": "2026-07-21T14:27:00-04:00",
-  "nota": "Habitable corte 21/07/2026 ~10:00 (descarga). 1×10 corte 17/07/2026.",
-  "n_1x10": 33251,
-  "n_hab": 17392,
-  "coincide_auto": 4649,
-  "solo_1x10": 22432
+﻿{
+    "coincide_auto":  4705,
+    "n_hab":  17290,
+    "dedupe_modo":  "estricto_gps_direccion_tipologia",
+    "origen":  "precarga_despliegue",
+    "solo_1x10":  22400,
+    "generado_en":  "2026-07-21T22:32:19+00:00",
+    "nota":  "Corte tipología/encoding estricto. Sustituye seed previo; regenerable desde UI.",
+    "corte_generado_en":  "2026-07-21 17:49",
+    "n_1x10":  33251
 }

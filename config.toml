@@ -1,32 +1,24 @@
-# Rutas F0 — fuentes locales (ajustar por máquina)
+﻿# Producción (Render) — rutas solo para reprocesar vía UI/uploads
 [sources]
-solicitudes_1x10 = 'data/processed/solicitudes.parquet'
-inspecciones_habitable = 'data/uploads/inspecciones_habitable.csv'
+solicitudes_1x10 = 'data/uploads/1x10.xlsx'
+inspecciones_habitable = 'data/uploads/habitable.csv'
 habitable_sheet = 'Inspecciones'
-corte_1x10_etiqueta = '17/07/2026'
-corte_habitable_etiqueta = '21/07/2026 · descarga ~10:00'
-corte_nota = 'Habitable actualizado al corte descargado el 21/07/2026 a las 10:00. La información de 1×10 corresponde al corte del 17/07/2026 (semana previa).'
 
 [matching]
-# Radio en metros para match geo 1×10 ↔ Habitable
 radius_m = 50
-# Similarity mínima de nombre (0-100) para match alto
 name_score_high = 85
-# Similarity mínima para reforzar match medio
 name_score_medium = 70
-# Por debajo de esto, un vecino a ≤50 m NO cuenta como “dudoso”
-# (p. ej. Cattleya vs Orion score ~19 → sigue como pendiente)
 name_score_geo_min = 40
-# Unificación de reportes 1×10 en la misma ubicación
-dedupe_radius_m = 20
+dedupe_radius_m = 10
+dedupe_addr_min = 75
+dedupe_auto_m = 3
+dedupe_auto_addr_min = 55
 
 [geo]
-# Bounding box Venezuela (calidad)
 lat_min = 0.5
 lat_max = 12.5
 lng_min = -73.5
 lng_max = -59.5
-# Pin hotspot conocido (Libertador) — baja confianza
 hotspot_lat = 10.488587
 hotspot_lng = -66.976782
 hotspot_decimals = 6

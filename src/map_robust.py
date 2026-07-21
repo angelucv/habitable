@@ -526,39 +526,33 @@ def render_map_ui(
     solo: pd.DataFrame,
     dud: pd.DataFrame,
 ) -> None:
-    """Controles del mapa agrupados: cartografía → capas → búsqueda → avanzado."""
+    """Controles compactos del mapa: base/vista + capas + búsqueda."""
 
-    # —— Cartografía ——
-    from ui_theme import render_section
-
-    render_section(
-        "Cartografía",
-        "Elige mapa base y vista. Todas las bases quedan en el control de capas del mapa.",
-    )
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
     with c1:
         basemap = st.selectbox(
-            "Mapa base inicial",
+            "Mapa base",
             options=list(BASEMAPS.keys()),
             index=list(BASEMAPS.keys()).index("OSM claro (Carto)"),
-            help="OpenStreetMap, Carto, Esri (satélite/calles) y topográfico. "
-            "También puedes cambiarlos en el control de capas del mapa (arriba a la derecha).",
+            key="map_op_basemap",
+            help="También en el control de capas del mapa.",
         )
     with c2:
         view_name = st.selectbox(
-            "Vista inicial",
+            "Vista",
             list(VIEWS.keys()),
-            help="Encadre al cargar. La búsqueda puede recentrar el mapa.",
+            key="map_op_view",
+            help="Encadre al cargar.",
         )
-    st.caption(
-        "Cambio de base también disponible en el control de capas del mapa (arriba a la derecha)."
-    )
+    with c3:
+        q = st.text_input(
+            "Buscar",
+            value="",
+            placeholder="Edificio, dirección o código…",
+            key="map_op_q",
+            help="Centra y marca resultados en rojo.",
+        )
 
-    # —— Capas de datos (mismo esquema del canvas mockup) ——
-    render_section(
-        "Capas de datos",
-        "Dudosos apagados por defecto. Coincidencias = ya atendidas (alta + media).",
-    )
     layer_opts = [
         "Habitable",
         "Coincidencias (alta+media)",
@@ -566,47 +560,35 @@ def render_map_ui(
         "Dudosos geo",
         "Todas solicitudes 1×10",
     ]
-    layers = st.multiselect(
-        "Qué mostrar en el mapa",
-        options=layer_opts,
-        default=[
-            "Habitable",
-            "Coincidencias (alta+media)",
-            "Solo 1×10 (pendientes)",
-        ],
-        help="Como en el mockup: Dudosos apagados por defecto. "
-        "Coincidencias = ya atendidas (match alta+media).",
-    )
+    l1, l2 = st.columns([3, 2])
+    with l1:
+        layers = st.multiselect(
+            "Capas",
+            options=layer_opts,
+            default=[
+                "Habitable",
+                "Coincidencias (alta+media)",
+                "Solo 1×10 (pendientes)",
+            ],
+            key="map_op_layers",
+            help="Dudosos apagados por defecto. Coincidencias = atendidas.",
+        )
+    with l2:
+        heat_opts = st.multiselect(
+            "Densidad",
+            options=["Pendientes", "Inspecciones Habitable"],
+            default=[],
+            key="map_op_heat",
+            help="Heatmap opcional.",
+        )
     show_hab = "Habitable" in layers
     show_coin = "Coincidencias (alta+media)" in layers
     show_solo = "Solo 1×10 (pendientes)" in layers
     show_dud = "Dudosos geo" in layers
     show_1x10 = "Todas solicitudes 1×10" in layers
-
-    heat_opts = st.multiselect(
-        "Densidad (heatmap)",
-        options=["Pendientes", "Inspecciones Habitable"],
-        default=[],
-        help="Capa extra de densidad. Los puntos de las capas de arriba se muestran completos.",
-    )
     show_heat_pend = "Pendientes" in heat_opts
     show_heat_hab = "Inspecciones Habitable" in heat_opts
 
-    st.caption(
-        f"Selección → Habitable {len(hab_map):,} · "
-        f"Coincidencias {len(coin):,} · Solo 1×10 {len(solo):,} · "
-        f"Dudosos {len(dud):,} · Todas 1×10 {len(sol_map):,}".replace(",", ".")
-    )
-
-    # —— Búsqueda ——
-    render_section("Búsqueda", "Centra el mapa y marca resultados.")
-    q = st.text_input(
-        "Edificio o dirección",
-        value="",
-        placeholder="Ej. Cattleya, Samanes, Andrés Bello",
-        help="Centra el mapa y marca resultados en rojo.",
-        label_visibility="collapsed",
-    )
     highlight = pd.DataFrame()
     focus_lat = focus_lng = None
     if q.strip():
@@ -625,15 +607,15 @@ def render_map_ui(
             mask &= text.str.contains(t, case=False, na=False, regex=False)
         highlight = sol_map.loc[mask].copy()
         if highlight.empty:
-            st.warning(f"Sin resultados para «{q}» en el filtro actual.")
+            st.caption(f"Sin resultados para «{q}».")
         else:
-            st.success(
-                f"{len(highlight):,} resultado(s). "
-                f"Primero: {highlight.iloc[0].get('direccion', '')}".replace(",", ".")
+            st.caption(
+                f"{len(highlight):,} resultado(s) · "
+                f"{highlight.iloc[0].get('direccion', '')}".replace(",", ".")
             )
             focus_lat = float(highlight.iloc[0]["lat"])
             focus_lng = float(highlight.iloc[0]["lng"])
-            with st.expander("Ver resultados de búsqueda"):
+            with st.expander("Resultados de búsqueda", expanded=False):
                 cols = [
                     c
                     for c in [
@@ -649,12 +631,10 @@ def render_map_ui(
                 ]
                 st.dataframe(highlight[cols].head(40), use_container_width=True)
 
-    # —— Extras ——
     with st.expander("Extras del mapa", expanded=False):
-        show_minimap = st.checkbox("Mini-mapa", value=False)
+        show_minimap = st.checkbox("Mini-mapa", value=False, key="map_op_minimap")
         st.caption(
-            "El mapa pinta todos los puntos de las capas seleccionadas "
-            "según el filtro territorial. Si tarda, reduce capas o filtra por estado."
+            "Si el mapa tarda, reduce capas o filtra por territorio."
         )
 
     # Sin tope: todos los puntos del filtro actual
