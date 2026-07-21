@@ -30,5 +30,10 @@
   "dedupe_radius_m": 20.0,
   "source_1x10": "C:/Users/Angel/Downloads/Sin título 1x10.xlsx",
   "source_habitable": "C:/Users/Angel/Downloads/habitable_inspecciones_2026-07-20_22-11-06.csv",
-  "habitable_sheet": "(csv)"
+  "habitable_sheet": "(csv)",
+  "corte_generado_en": "2026-07-20 20:44",
+  "corte_1x10_archivo": "Sin título 1x10.xlsx",
+  "corte_habitable_archivo": "habitable_inspecciones_2026-07-20_22-11-06.csv",
+  "corte_1x10_n": 33251,
+  "corte_habitable_n": 17290
 }

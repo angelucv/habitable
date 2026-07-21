@@ -60,6 +60,28 @@ def fmt_num(n: float | int) -> str:
     return f"{int(n):,}".replace(",", ".")
 
 
+def _label_corte(summary: dict) -> dict:
+    """Etiquetas legibles del corte de datos (sidebar)."""
+    from pathlib import Path
+
+    gen = summary.get("corte_generado_en") or "—"
+    a1 = summary.get("corte_1x10_archivo") or Path(
+        str(summary.get("source_1x10") or "")
+    ).name
+    a2 = summary.get("corte_habitable_archivo") or Path(
+        str(summary.get("source_habitable") or "")
+    ).name
+    n1 = summary.get("corte_1x10_n", summary.get("n_1x10", 0))
+    n2 = summary.get("corte_habitable_n", summary.get("n_hab", 0))
+    return {
+        "generado": gen,
+        "archivo_1x10": a1 or "(sin dato)",
+        "archivo_hab": a2 or "(sin dato)",
+        "n_1x10": fmt_num(n1 or 0),
+        "n_hab": fmt_num(n2 or 0),
+    }
+
+
 def page_mapa(sol: pd.DataFrame, hab: pd.DataFrame, summary: dict):
     render_section(
         "Mapa operativo",
@@ -276,6 +298,33 @@ def main():
     sol, hab, summary = load_data()
 
     with st.sidebar:
+        corte = _label_corte(summary)
+        st.markdown("### Corte de información")
+        st.markdown(
+            f"""
+            <div style="background:rgba(252,209,22,0.12);border:1px solid rgba(252,209,22,0.45);border-radius:8px;padding:0.75rem 0.85rem;margin:0.35rem 0 0.9rem 0;">
+              <div style="color:#FCD116;font-size:0.68rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:0.45rem;">Fuentes en uso</div>
+              <div style="color:#E2E8F0;font-size:0.72rem;margin-bottom:0.55rem;">
+                <div style="color:#94A3B8;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.04em;">1×10</div>
+                <div style="color:#FFFFFF;font-weight:600;word-break:break-word;">{corte['archivo_1x10']}</div>
+                <div style="color:#CBD5E1;">{corte['n_1x10']} registros</div>
+              </div>
+              <div style="color:#E2E8F0;font-size:0.72rem;margin-bottom:0.55rem;">
+                <div style="color:#94A3B8;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.04em;">Habitable</div>
+                <div style="color:#FFFFFF;font-weight:600;word-break:break-word;">{corte['archivo_hab']}</div>
+                <div style="color:#CBD5E1;">{corte['n_hab']} inspecciones</div>
+              </div>
+              <div style="color:#94A3B8;font-size:0.68rem;border-top:1px solid rgba(255,255,255,0.15);padding-top:0.45rem;">
+                Cruce generado: <span style="color:#F8FAFC;font-weight:600;">{corte['generado']}</span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Al subir archivos nuevos y procesar el cruce, este bloque se actualiza."
+        )
+        st.divider()
         st.markdown("### Panorama nacional")
         st.markdown(
             f"""

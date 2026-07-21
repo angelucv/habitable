@@ -338,6 +338,14 @@ def run_pipeline(
     summary["source_1x10"] = sol_src
     summary["source_habitable"] = hab_src
     summary["habitable_sheet"] = sheet
+    # Corte visible para usuarios (nombres cortos + marca de generación)
+    from datetime import datetime
+
+    summary["corte_generado_en"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    summary["corte_1x10_archivo"] = Path(sol_src).name
+    summary["corte_habitable_archivo"] = Path(hab_src).name
+    summary["corte_1x10_n"] = int(len(sol))
+    summary["corte_habitable_n"] = int(len(hab))
 
     OUT.mkdir(parents=True, exist_ok=True)
     sol_path = OUT / "solicitudes.parquet"
