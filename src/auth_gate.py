@@ -65,16 +65,24 @@ def can_manage_users() -> bool:
     return role_can_manage_users(current_role() or "")
 
 
-def logout() -> None:
-    for k in (SESSION_AUTH, SESSION_USER, SESSION_ROLE, SESSION_ENROLL):
-        st.session_state.pop(k, None)
-
-
 def _set_session(username: str, role: str) -> None:
+    from audit_log import log_event
+
     st.session_state[SESSION_AUTH] = True
     st.session_state[SESSION_USER] = username
     st.session_state[SESSION_ROLE] = role
     st.session_state.pop(SESSION_ENROLL, None)
+    log_event("login_ok", username=username, role=role)
+
+
+def logout() -> None:
+    from audit_log import log_event
+
+    user = current_username()
+    role = current_role()
+    log_event("logout", username=user, role=role)
+    for k in (SESSION_AUTH, SESSION_USER, SESSION_ROLE, SESSION_ENROLL):
+        st.session_state.pop(k, None)
 
 
 def _qr_image_bytes(uri: str) -> bytes:
@@ -179,6 +187,13 @@ def _render_login() -> None:
     if submitted:
         user = authenticate_password(username, password)
         if not user:
+            from audit_log import log_event
+
+            log_event(
+                "login_fail",
+                username=(username or "").strip().lower(),
+                detail={"reason": "bad_credentials"},
+            )
             st.error("Usuario o contraseña incorrectos.")
             st.stop()
             return
@@ -187,6 +202,14 @@ def _render_login() -> None:
             st.rerun()
             return
         if not verify_totp(user.totp_secret, totp_code):
+            from audit_log import log_event
+
+            log_event(
+                "login_fail",
+                username=user.username,
+                role=user.role,
+                detail={"reason": "bad_totp"},
+            )
             st.error("Código 2FA incorrecto.")
             st.stop()
             return
@@ -196,7 +219,7 @@ def _render_login() -> None:
 
 
 def render_user_admin_panel() -> None:
-    """Panel simple para que un admin cree usuarios."""
+    """Panel simple para que un admin cree usuarios y vea auditoría."""
     if not can_manage_users():
         return
     with st.sidebar.expander("Administrar usuarios", expanded=False):
@@ -214,10 +237,39 @@ def render_user_admin_panel() -> None:
         if go:
             try:
                 create_user(u, p, role=role)  # type: ignore[arg-type]
+                from audit_log import log_event
+
+                log_event(
+                    "user_create",
+                    username=current_username(),
+                    role=current_role(),
+                    detail={"new_user": u.strip().lower(), "new_role": role},
+                )
                 st.success(f"Usuario «{u}» creado. Debe activar 2FA al entrar.")
             except ValueError as e:
                 st.error(str(e))
 
+    with st.sidebar.expander("Auditoría reciente", expanded=False):
+        from audit_log import AUDIT_PATH, read_events
+
+        st.caption(f"Registro: `{AUDIT_PATH.name}` (solo admin).")
+        events = read_events(40)
+        if not events:
+            st.info("Sin eventos aún.")
+        else:
+            import pandas as pd
+
+            rows = [
+                {
+                    "ts": e.get("ts", "")[:19],
+                    "action": e.get("action", ""),
+                    "user": e.get("username", ""),
+                    "role": e.get("role", ""),
+                    "file": (e.get("detail") or {}).get("file_name", ""),
+                }
+                for e in events
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 def require_login() -> bool:
     """Exige sesión autenticada (+ 2FA). Llama ``st.stop`` si no hay acceso."""

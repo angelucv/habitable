@@ -7,6 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+import audit_ui
 import folium
 import pandas as pd
 import streamlit as st
@@ -495,7 +496,7 @@ def page_nasa_1x10(summary: dict | None = None) -> None:
     )
     buf = BytesIO()
     alta.to_csv(buf, index=False)
-    st.download_button(
+    audit_ui.download_button(
         "Descargar cola alta CSV",
         data=buf.getvalue(),
         file_name="cola_1x10_nasa_likely.csv",

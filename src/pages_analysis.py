@@ -15,6 +15,7 @@ from charts_echarts import (
     bar_vertical,
     donut,
 )
+import audit_ui
 from habitable_reports import (
     PISO_BANDS,
     RIESGO_LEVELS,
@@ -341,7 +342,7 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
             )
         else:
             xlsx = excel_bytes_depurado(filtrado)
-            st.download_button(
+            audit_ui.download_button(
                 "Descargar 1×10 caso a caso (Excel)",
                 data=xlsx,
                 file_name="solicitudes_1x10_casos_contacto.xlsx",
@@ -454,7 +455,7 @@ def page_1x10(sol: pd.DataFrame, summary: dict, sub: str = "x10_analisis"):
         if can_see_contact() and any(
             c in show_cols for c in ("cedula", "denunciante", "telefono")
         ):
-            st.download_button(
+            audit_ui.download_button(
                 "Descargar cola pendiente caso a caso (CSV)",
                 data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
                 file_name="cola_pendiente_1x10_casos.csv",
@@ -466,7 +467,7 @@ def page_1x10(sol: pd.DataFrame, summary: dict, sub: str = "x10_analisis"):
                 "La tabla en pantalla tampoco incluye cédula/teléfono."
             )
         else:
-            st.download_button(
+            audit_ui.download_button(
                 "Descargar cola pendiente (CSV sin contacto)",
                 data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
                 file_name="cola_pendiente_1x10_casos.csv",
@@ -943,7 +944,7 @@ def _tab_no_estructural(hab: pd.DataFrame):
     with st.expander("Lista de infraestructuras (exportable)"):
         vista = list_view(sub, 800)
         st.dataframe(vista, use_container_width=True)
-        st.download_button(
+        audit_ui.download_button(
             "CSV no estructurales",
             data=vista.to_csv(index=False).encode("utf-8-sig"),
             file_name="habitable_no_estructurales.csv",
@@ -1021,7 +1022,7 @@ def _tab_moderado(hab: pd.DataFrame):
     with st.expander("Lista de infraestructuras (exportable)"):
         vista = list_view(sub, 800)
         st.dataframe(vista, use_container_width=True)
-        st.download_button(
+        audit_ui.download_button(
             "CSV estructurales moderados",
             data=vista.to_csv(index=False).encode("utf-8-sig"),
             file_name="habitable_estructurales_moderados.csv",
@@ -1080,7 +1081,7 @@ def _tab_severo_externo(hab: pd.DataFrame):
         with st.expander("Lista estructuras con daño severo"):
             vista = list_view(sub_sev, 800)
             st.dataframe(vista, use_container_width=True)
-            st.download_button(
+            audit_ui.download_button(
                 "CSV severos",
                 data=vista.to_csv(index=False).encode("utf-8-sig"),
                 file_name="habitable_estructurales_severos.csv",
@@ -1334,7 +1335,7 @@ una sola vez.
 
     d1, d2, d3 = st.columns([1, 1, 2.2])
     with d1:
-        st.download_button(
+        audit_ui.download_button(
             "CSV filtrado",
             data=pend.to_csv(index=False).encode("utf-8-sig"),
             file_name="pendientes_1x10_por_ubicacion_filtrado.csv",
@@ -1344,7 +1345,7 @@ una sola vez.
         )
     with d2:
         xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
-        st.download_button(
+        audit_ui.download_button(
             "Excel filtrado",
             data=xlsx,
             file_name="reportes_1x10_pendientes_filtrado.xlsx",
@@ -1434,7 +1435,7 @@ una sola vez.
             f"Muestra hasta 500 casos · universo filtrado: {fmt_num(len(enr))}."
         )
         st.dataframe(muestra, use_container_width=True, hide_index=True)
-        st.download_button(
+        audit_ui.download_button(
             "CSV análisis de descripción (muestra)",
             data=muestra.to_csv(index=False).encode("utf-8-sig"),
             file_name="analisis_descripcion_1x10.csv",

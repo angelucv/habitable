@@ -35,3 +35,5 @@ data/external_nasa/**/*.geojson
 data/external_nasa/**/*.geojsonl
 
 data/auth/
+
+data/audit/

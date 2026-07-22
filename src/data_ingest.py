@@ -115,9 +115,30 @@ def render_upload_panel() -> None:
                     quiet=True,
                 )
             except Exception as exc:  # noqa: BLE001
+                from audit_log import log_event
+
+                log_event(
+                    "pipeline_fail",
+                    username=str(st.session_state.get("bi_username") or ""),
+                    role=str(st.session_state.get("bi_role") or ""),
+                    detail={"error": str(exc)[:300]},
+                )
                 st.error(f"No se pudo procesar: {exc}")
                 return
 
+        from audit_log import log_event
+
+        log_event(
+            "pipeline_ok",
+            username=str(st.session_state.get("bi_username") or ""),
+            role=str(st.session_state.get("bi_role") or ""),
+            detail={
+                "n_1x10": summary.get("n_1x10"),
+                "n_hab": summary.get("n_hab"),
+                "file_1x10": path_1x10.name,
+                "file_hab": path_hab.name if path_hab else "",
+            },
+        )
         META_PATH.write_text(
             datetime.now().isoformat(timespec="seconds"),
             encoding="utf-8",
