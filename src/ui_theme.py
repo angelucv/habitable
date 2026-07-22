@@ -193,6 +193,107 @@ def inject_executive_css() -> None:
             opacity: 1 !important;
         }}
 
+        /* Panorama nacional por fuente (sin tarjetas apiladas) */
+        .sb-panorama {{
+            margin: 0.35rem 0 0.55rem 0;
+        }}
+        .sb-fuente {{
+            padding: 0.65rem 0 0.75rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.18);
+        }}
+        .sb-fuente:last-of-type {{
+            border-bottom: none;
+        }}
+        .sb-fuente-tag {{
+            color: #FCD116;
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 0.15rem;
+        }}
+        .sb-fuente-name {{
+            color: #FFFFFF;
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }}
+        .sb-fuente-meta {{
+            color: #94A3B8;
+            font-size: 0.68rem;
+            word-break: break-word;
+            margin: 0.15rem 0 0.4rem 0;
+            line-height: 1.35;
+        }}
+        .sb-fuente-total {{
+            color: #FFFFFF;
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 0.45rem;
+        }}
+        .sb-fuente-total span {{
+            color: #CBD5E1;
+            font-family: 'Source Sans 3', 'Segoe UI', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            margin-left: 0.25rem;
+        }}
+        .sb-dist {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.28rem;
+            padding-left: 0.15rem;
+            border-left: 2px solid rgba(252,209,22,0.45);
+            margin-left: 0.1rem;
+        }}
+        .sb-dist-row {{
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.35rem;
+            align-items: baseline;
+        }}
+        .sb-dist-lab {{
+            color: #CBD5E1;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }}
+        .sb-dist-lab.sb-v {{ color: #4ADE80; }}
+        .sb-dist-lab.sb-am {{ color: #FCD116; }}
+        .sb-dist-lab.sb-rj {{ color: #F87171; }}
+        .sb-dist-lab.sb-ng {{ color: #E2E8F0; }}
+        .sb-dist-val {{
+            color: #FFFFFF;
+            font-size: 0.88rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }}
+        .sb-dist-val.sb-at {{ color: #E2E8F0; }}
+        .sb-dist-val.sb-pend {{ color: #FCD116; }}
+        .sb-dist-pct {{
+            color: #94A3B8;
+            font-size: 0.7rem;
+            font-weight: 600;
+            min-width: 2.6rem;
+            text-align: right;
+        }}
+        .sb-cruce {{
+            margin-top: 0.65rem;
+            padding-top: 0.55rem;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            color: #94A3B8;
+            font-size: 0.68rem;
+            line-height: 1.45;
+        }}
+        .sb-cruce strong {{
+            color: #F8FAFC;
+            font-weight: 600;
+        }}
+
         /* —— Índice ejecutivo (sin tarjetas apiladas) —— */
         .nav-index {{
             display: grid;

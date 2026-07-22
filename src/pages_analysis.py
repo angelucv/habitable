@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -632,13 +634,68 @@ def page_habitable(hab: pd.DataFrame, summary: dict, sub: str = "hab_matriz"):
     if sub == "hab_matriz":
         _tab_matriz_semaforo(hab)
     elif sub == "hab_explorar":
-        _tab_explorar_pygwalker(hab)
+        _tab_explorar_perspective(hab)
     elif sub == "hab_ne":
         _tab_no_estructural(hab)
     elif sub == "hab_mod":
         _tab_moderado(hab)
     else:
         _tab_severo_externo(hab)
+
+
+def _tab_explorar_perspective(hab: pd.DataFrame):
+    """Ensayo local: Perspective (pivot/filtro/gráfico) en lugar de PyGWalker."""
+    from ui_theme import render_section
+
+    render_section(
+        "Explorar / reportería (Perspective · ensayo)",
+        "Pivot, filtros y gráficos en el navegador (WASM). Ensayo local para "
+        "evaluar si sustituye a PyGWalker.",
+    )
+    st.caption(
+        "Herramienta: Perspective. No publicar en prod hasta validar rendimiento "
+        "y usabilidad con el equipo."
+    )
+
+    base = _hab_filters(hab, "explore")
+    explore = habitable_explore_frame(base)
+    if explore.empty:
+        st.warning("Sin filas en el filtro actual.")
+        return
+
+    st.info(
+        f"Universo del filtro · {fmt_num(len(explore))} inspecciones · "
+        f"{len(explore.columns)} campos. "
+        "Prueba pivotes por `etiqueta` / `estado` y cambia el plugin (tabla o gráfico)."
+    )
+
+    with st.expander("Campos disponibles en esta vista", expanded=False):
+        st.write(", ".join(explore.columns.tolist()))
+
+    # Serialización JSON-safe (NaN/Inf → null; fechas → texto)
+    work = explore.copy()
+    for c in work.columns:
+        if pd.api.types.is_datetime64_any_dtype(work[c]):
+            work[c] = work[c].dt.strftime("%Y-%m-%d %H:%M:%S")
+    # to_json convierte NaN → null (dict(orient=records) deja NaN inválido en JSON)
+    rows = json.loads(work.to_json(orient="records", date_format="iso"))
+
+    try:
+        from streamlit_perspective import perspective_static
+    except Exception:
+        # Prod / entornos sin el paquete: mantener PyGWalker.
+        _tab_explorar_pygwalker(hab)
+        return
+
+    perspective_static(
+        rows,
+        height=780,
+        config={
+            "plugin": "datagrid",
+            "settings": True,
+        },
+        key="hab_perspective_explore",
+    )
 
 
 def _tab_explorar_pygwalker(hab: pd.DataFrame):

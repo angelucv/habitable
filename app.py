@@ -201,61 +201,82 @@ def main():
         st.session_state["nav_item"] = active
         st.divider()
         corte = _label_corte(summary)
-        st.markdown("### Corte de información")
-        st.markdown(
-            f"""
-            <div style="background:rgba(252,209,22,0.12);border:1px solid rgba(252,209,22,0.45);border-radius:8px;padding:0.75rem 0.85rem;margin:0.35rem 0 0.9rem 0;">
-              <div style="color:#FCD116;font-size:0.68rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:0.45rem;">Fuentes en uso</div>
-              <div style="color:#E2E8F0;font-size:0.72rem;margin-bottom:0.55rem;">
-                <div style="color:#94A3B8;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.04em;">1×10</div>
-                <div style="color:#FFFFFF;font-weight:600;word-break:break-word;">{corte['archivo_1x10']}</div>
-                <div style="color:#CBD5E1;">{corte['n_1x10']} registros</div>
-              </div>
-              <div style="color:#E2E8F0;font-size:0.72rem;margin-bottom:0.55rem;">
-                <div style="color:#94A3B8;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.04em;">Habitable</div>
-                <div style="color:#FFFFFF;font-weight:600;word-break:break-word;">{corte['archivo_hab']}</div>
-                <div style="color:#CBD5E1;">{corte['n_hab']} inspecciones</div>
-              </div>
-              <div style="color:#94A3B8;font-size:0.68rem;border-top:1px solid rgba(255,255,255,0.15);padding-top:0.45rem;">
-                Cruce generado: <span style="color:#F8FAFC;font-weight:600;">{corte['generado']}</span>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.caption(
-            "Al subir archivos nuevos y procesar el cruce, este bloque se actualiza."
-        )
-        st.divider()
+        n_1x10 = int(summary.get("n_1x10", 0) or 0)
+        n_hab = int(summary.get("n_hab", 0) or 0)
+        n_atend = int(summary.get("coincide_auto", 0) or 0)
+        n_pend = int(summary.get("solo_1x10", 0) or 0)
+        pct_at = 100.0 * n_atend / max(n_1x10, 1)
+        pct_pend = 100.0 * n_pend / max(n_1x10, 1)
+
+        n_v = n_a = n_r = n_n = 0
+        if hab is not None and len(hab) and "etiqueta_n" in hab.columns:
+            vc = hab["etiqueta_n"].astype(str).str.upper().value_counts()
+            n_v = int(vc.get("VERDE", 0))
+            n_a = int(vc.get("AMARILLO", 0))
+            n_r = int(vc.get("ROJO", 0))
+            n_n = int(vc.get("NEGRO", 0))
+
         st.markdown("### Panorama nacional")
         st.markdown(
             f"""
-            <div style="display:flex;flex-direction:column;gap:0.55rem;margin:0.4rem 0 0.8rem 0;">
-              <div style="background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.22);border-top:3px solid #FCD116;border-radius:8px;padding:0.7rem 0.85rem;">
-                <div style="color:#E2E8F0;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Solicitudes 1×10</div>
-                <div style="color:#FFFFFF;font-family:Source Serif 4,Georgia,serif;font-size:1.45rem;font-weight:700;">{fmt_num(summary.get("n_1x10", 0))}</div>
+            <div class="sb-panorama">
+              <div class="sb-fuente">
+                <div class="sb-fuente-tag">Fuente A · demanda</div>
+                <div class="sb-fuente-name">1×10</div>
+                <div class="sb-fuente-meta">{corte['archivo_1x10']}</div>
+                <div class="sb-fuente-total">{fmt_num(n_1x10)} <span>solicitudes</span></div>
+                <div class="sb-dist">
+                  <div class="sb-dist-row">
+                    <span class="sb-dist-lab">Ya atendidas</span>
+                    <span class="sb-dist-val sb-at">{fmt_num(n_atend)}</span>
+                    <span class="sb-dist-pct">{pct_at:.1f}%</span>
+                  </div>
+                  <div class="sb-dist-row">
+                    <span class="sb-dist-lab">Pendientes</span>
+                    <span class="sb-dist-val sb-pend">{fmt_num(n_pend)}</span>
+                    <span class="sb-dist-pct">{pct_pend:.1f}%</span>
+                  </div>
+                </div>
               </div>
-              <div style="background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.22);border-top:3px solid #FCD116;border-radius:8px;padding:0.7rem 0.85rem;">
-                <div style="color:#E2E8F0;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Inspecciones Habitable</div>
-                <div style="color:#FFFFFF;font-family:Source Serif 4,Georgia,serif;font-size:1.45rem;font-weight:700;">{fmt_num(summary.get("n_hab", 0))}</div>
+              <div class="sb-fuente">
+                <div class="sb-fuente-tag">Fuente B · campo</div>
+                <div class="sb-fuente-name">Habitable</div>
+                <div class="sb-fuente-meta">{corte['archivo_hab']}</div>
+                <div class="sb-fuente-total">{fmt_num(n_hab)} <span>inspecciones</span></div>
+                <div class="sb-dist">
+                  <div class="sb-dist-row">
+                    <span class="sb-dist-lab sb-v">Verde</span>
+                    <span class="sb-dist-val">{fmt_num(n_v)}</span>
+                    <span class="sb-dist-pct">{100 * n_v / max(n_hab, 1):.1f}%</span>
+                  </div>
+                  <div class="sb-dist-row">
+                    <span class="sb-dist-lab sb-am">Amarillo</span>
+                    <span class="sb-dist-val">{fmt_num(n_a)}</span>
+                    <span class="sb-dist-pct">{100 * n_a / max(n_hab, 1):.1f}%</span>
+                  </div>
+                  <div class="sb-dist-row">
+                    <span class="sb-dist-lab sb-rj">Rojo</span>
+                    <span class="sb-dist-val">{fmt_num(n_r)}</span>
+                    <span class="sb-dist-pct">{100 * n_r / max(n_hab, 1):.1f}%</span>
+                  </div>
+                  <div class="sb-dist-row">
+                    <span class="sb-dist-lab sb-ng">Negro</span>
+                    <span class="sb-dist-val">{fmt_num(n_n)}</span>
+                    <span class="sb-dist-pct">{100 * n_n / max(n_hab, 1):.1f}%</span>
+                  </div>
+                </div>
               </div>
-              <div style="background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.22);border-top:3px solid #FCD116;border-radius:8px;padding:0.7rem 0.85rem;">
-                <div style="color:#E2E8F0;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Ya atendidas</div>
-                <div style="color:#FFFFFF;font-family:Source Serif 4,Georgia,serif;font-size:1.45rem;font-weight:700;">{fmt_num(summary.get("coincide_auto", 0))}</div>
-              </div>
-              <div style="background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.22);border-top:3px solid #FCD116;border-radius:8px;padding:0.7rem 0.85rem;">
-                <div style="color:#E2E8F0;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Pendientes</div>
-                <div style="color:#FFFFFF;font-family:Source Serif 4,Georgia,serif;font-size:1.45rem;font-weight:700;">{fmt_num(summary.get("solo_1x10", 0))}</div>
+              <div class="sb-cruce">
+                Cruce <strong>{corte['generado']}</strong><br/>
+                Matching {summary.get('radius_m')} m ·
+                Unificación {summary.get('dedupe_radius_m', 10)} m
+                + dir≥{summary.get('dedupe_addr_min', 75)}
               </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.caption(
-            f"Matching a {summary.get('radius_m')} m · "
-            f"Unificación {summary.get('dedupe_radius_m', 10)} m "
-            f"+ dir≥{summary.get('dedupe_addr_min', 75)}"
-        )
+        st.caption("Al subir archivos nuevos y procesar el cruce, este bloque se actualiza.")
         st.divider()
         if summary.get("ubicaciones_unicas"):
             st.markdown("**Ubicaciones 1×10**")
@@ -264,7 +285,7 @@ def main():
                 f"Sitios con varios reportes: "
                 f"{fmt_num(summary.get('ubicaciones_con_multiples_reportes', 0))}"
             )
-        st.divider()
+            st.divider()
         if st.button("Recargar datos", use_container_width=True):
             st.cache_data.clear()
             st.rerun()

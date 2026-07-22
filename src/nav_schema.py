@@ -100,7 +100,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavItem(
                 "hab_explorar",
                 "Explorar / reportería",
-                "Análisis libre con PyGWalker para cortes ad hoc y reportería.",
+                "Análisis libre: Perspective en local; PyGWalker si el paquete no está instalado.",
             ),
         ),
     ),
