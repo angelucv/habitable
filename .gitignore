@@ -37,3 +37,5 @@ data/external_nasa/**/*.geojsonl
 data/auth/
 
 data/audit/
+
+.env.bi_data_key

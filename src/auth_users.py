@@ -62,11 +62,13 @@ def _ensure_dir() -> None:
 
 
 def load_users() -> dict[str, User]:
+    from secure_io import read_json
+
     _ensure_dir()
     if not USERS_PATH.exists():
         return {}
     try:
-        raw = json.loads(USERS_PATH.read_text(encoding="utf-8"))
+        raw = read_json(USERS_PATH)
     except Exception:
         return {}
     users: dict[str, User] = {}
@@ -78,15 +80,15 @@ def load_users() -> dict[str, User]:
 
 
 def save_users(users: dict[str, User]) -> None:
+    from secure_io import write_json
+
     _ensure_dir()
     payload = {
         "version": 1,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "users": [u.to_dict() for u in users.values()],
     }
-    tmp = USERS_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(USERS_PATH)
+    write_json(USERS_PATH, payload)
 
 
 def hash_password(password: str) -> str:

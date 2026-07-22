@@ -11,6 +11,7 @@ Salida: parquet + resumen JSON en data/external_nasa/cruce_1x10_nasa/
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -20,6 +21,9 @@ import pandas as pd
 from shapely import prepare, STRtree
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from secure_io import read_parquet  # noqa: E402
 NASA_GJ = (
     ROOT
     / "data"
@@ -84,7 +88,7 @@ def load_nasa() -> gpd.GeoDataFrame:
 
 
 def load_1x10() -> gpd.GeoDataFrame:
-    sol = pd.read_parquet(SOL_PQ)
+    sol = read_parquet(SOL_PQ)
     s = sol.dropna(subset=["lat", "lng"]).copy()
     if "mapeable" in s.columns:
         s = s[s["mapeable"].fillna(False)]

@@ -43,10 +43,12 @@ from ui_theme import (  # noqa: E402
 )
 
 @st.cache_data(show_spinner="Cargando datos procesados…")
-def load_data():
-    sol = pd.read_parquet(DATA / "solicitudes.parquet")
-    hab = pd.read_parquet(DATA / "inspecciones.parquet")
-    summary = json.loads((DATA / "summary.json").read_text(encoding="utf-8"))
+def load_data(_crypto_on: bool = False):
+    from secure_io import read_json, read_parquet
+
+    sol = read_parquet(DATA / "solicitudes.parquet")
+    hab = read_parquet(DATA / "inspecciones.parquet")
+    summary = read_json(DATA / "summary.json")
     return sol, hab, summary
 
 
@@ -177,6 +179,26 @@ def main():
     # P0 seguridad: no cargar datos ni panel de subida sin acceso válido
     require_login()
 
+    from secure_io import (
+        assert_crypto_ready,
+        encryption_enabled,
+        is_encrypted_file,
+    )
+
+    try:
+        assert_crypto_ready()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    if ensure_data_ready() and is_encrypted_file(DATA / "solicitudes.parquet"):
+        if not encryption_enabled():
+            st.error(
+                "Los datos en disco están cifrados. Defina **BI_DATA_KEY** "
+                "(misma clave usada al cifrar) y reinicie la app."
+            )
+            st.stop()
+
     from nav_schema import HOME_ID, find_section, resolve_nav
     from ui_theme import render_home_index, render_section, render_section_subtabs, render_sidebar_nav
 
@@ -210,7 +232,7 @@ def main():
     if not ensure_data_ready():
         st.stop()
 
-    sol, hab, summary = load_data()
+    sol, hab, summary = load_data(encryption_enabled())
 
     # P1 seguridad: minimizar PII de contacto según rol (ejecutivo sin cédula/teléfono)
     allow_contact = can_see_contact()
@@ -222,6 +244,10 @@ def main():
             f"Sesión: **{current_username() or '—'}** · "
             f"{ROLE_LABELS.get(role, role)}"
         )
+        if encryption_enabled():
+            st.caption("Cifrado en reposo: **activo** (BI_DATA_KEY).")
+        else:
+            st.caption("Cifrado en reposo: inactivo (solo desarrollo).")
         if allow_contact:
             st.caption("Permiso de contacto: sí (operador/admin).")
         else:

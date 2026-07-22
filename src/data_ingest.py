@@ -20,8 +20,10 @@ def _ensure_upload_dir() -> None:
 
 
 def _save_upload(uploaded, dest: Path) -> Path:
+    from secure_io import write_bytes
+
     _ensure_upload_dir()
-    dest.write_bytes(uploaded.getbuffer())
+    write_bytes(dest, bytes(uploaded.getbuffer()))
     return dest
 
 

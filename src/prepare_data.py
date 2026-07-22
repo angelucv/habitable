@@ -42,7 +42,11 @@ def load_config() -> dict:
 
 
 def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
-    df = pd.read_excel(path, dtype=str)
+    import io
+
+    from secure_io import read_bytes
+
+    df = pd.read_excel(io.BytesIO(read_bytes(path)), dtype=str)
     # Normaliza encabezados (espacios / puntos) antes del rename
     df.columns = (
         pd.Index(df.columns)
@@ -114,11 +118,16 @@ def prepare_solicitudes(path: str, geo_cfg: dict) -> pd.DataFrame:
 
 
 def prepare_habitable(path: str, sheet: str, geo_cfg: dict) -> pd.DataFrame:
+    import io
+
+    from secure_io import read_bytes
+
     src = Path(path)
+    blob = io.BytesIO(read_bytes(src))
     if src.suffix.lower() == ".csv":
-        df = pd.read_csv(src, dtype=str, encoding="utf-8")
+        df = pd.read_csv(blob, dtype=str, encoding="utf-8")
     else:
-        df = pd.read_excel(src, sheet_name=sheet, dtype=str)
+        df = pd.read_excel(blob, sheet_name=sheet, dtype=str)
     cols_txt = [c for c in TEXT_COLS_HAB if c in df.columns]
     for c in df.columns:
         if c not in cols_txt and (
@@ -523,10 +532,13 @@ def run_pipeline(
         if c in hab.columns
     ]
 
-    sol[sol_cols].to_parquet(sol_path, index=False)
-    hab[hab_cols].to_parquet(hab_path, index=False)
-    sum_path.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    from secure_io import write_parquet, write_text
+
+    write_parquet(sol[sol_cols], sol_path, index=False)
+    write_parquet(hab[hab_cols], hab_path, index=False)
+    write_text(
+        sum_path,
+        json.dumps(summary, ensure_ascii=False, indent=2),
     )
     _log(f"OK {sol_path}")
     _log(f"OK {hab_path}")

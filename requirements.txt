@@ -13,4 +13,4 @@ pygwalker>=0.4.9
 tornado>=6.4
 pyotp>=2.9
 qrcode[pil]>=7.4
-bcrypt>=4.1
+cryptography>=42.0

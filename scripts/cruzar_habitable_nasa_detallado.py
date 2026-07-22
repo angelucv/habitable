@@ -6,6 +6,7 @@ Reutiliza parquet NASA si existe.
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -14,6 +15,9 @@ import pandas as pd
 from shapely import STRtree
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from secure_io import read_parquet  # noqa: E402
 NASA_PQ = (
     ROOT
     / "data"
@@ -40,7 +44,7 @@ def load_nasa() -> gpd.GeoDataFrame:
 
 
 def load_habitable() -> gpd.GeoDataFrame:
-    h = pd.read_parquet(HAB_PQ)
+    h = read_parquet(HAB_PQ)
     s = h.dropna(subset=["lat", "lng"]).copy()
     if "mapeable" in s.columns:
         s = s[s["mapeable"].fillna(False)]
