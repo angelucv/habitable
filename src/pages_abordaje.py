@@ -182,12 +182,11 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
 
 
 def _layer_path(stem: str) -> Path | None:
-    pq = GIS_LITE / f"{stem}.parquet"
-    if pq.exists():
-        return pq
-    gj = GIS_LITE / f"{stem}.geojson"
-    if gj.exists():
-        return gj
+    """Prefiere GeoJSON (sin geopandas en producción); parquet solo como respaldo."""
+    for name in (f"{stem}.geojson", f"{stem}.geojson.zip", f"{stem}.parquet"):
+        p = GIS_LITE / name
+        if p.exists():
+            return p
     return None
 
 
@@ -196,16 +195,34 @@ def _load_geojson_dict(stem: str) -> dict | None:
     path = _layer_path(stem)
     if path is None:
         return None
-    if path.suffix == ".parquet":
-        import geopandas as gpd
 
+    # .geojson.zip — liviano y sin dependencias GIS nativas
+    if path.name.endswith(".geojson.zip"):
+        import zipfile
+
+        with zipfile.ZipFile(path) as zf:
+            names = [n for n in zf.namelist() if n.lower().endswith(".geojson")]
+            if not names:
+                return None
+            return json.loads(zf.read(names[0]).decode("utf-8"))
+
+    if path.suffix.lower() == ".geojson":
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    # Parquet solo si geopandas está instalado (local / opcional)
+    if path.suffix.lower() == ".parquet":
+        try:
+            import geopandas as gpd
+        except ImportError:
+            return None
         gdf = gpd.read_parquet(path)
         if gdf.crs is None:
             gdf = gdf.set_crs(4326)
         else:
             gdf = gdf.to_crs(4326)
         return json.loads(gdf.to_json())
-    return json.loads(path.read_text(encoding="utf-8"))
+
+    return None
 
 
 def _tile_layer(key: str, show: bool = True) -> folium.TileLayer:
