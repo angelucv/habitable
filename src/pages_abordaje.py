@@ -248,16 +248,22 @@ def _tile_layer(key: str, show: bool = True) -> folium.TileLayer:
     )
 
 
-def _style_fn(color: str, fill_opacity: float, *, outline_only: bool = False):
+def _style_fn(
+    color: str,
+    fill_opacity: float,
+    *,
+    outline_only: bool = False,
+    weight: float = 2.0,
+):
     fill = 0.0 if outline_only else fill_opacity
 
     def _style(_feature):
         return {
             "fillColor": color,
             "color": color,
-            "weight": 1.0,
+            "weight": weight,
             "fillOpacity": fill,
-            "opacity": 0.75,
+            "opacity": 0.9,
         }
 
     return _style
@@ -330,13 +336,40 @@ def _match_label(cat: str) -> str:
     }.get(str(cat or ""), str(cat or "—"))
 
 
-def _scale_radius(r: float, *, min_r: float = 3.5, max_r: float = 12.0) -> float:
-    """Radio visible en pantalla (el lote JS mantiene el rendimiento)."""
+def _scale_radius(r: float, *, min_r: float = 1.4, max_r: float = 5.0) -> float:
+    """Radio compacto: legible sin tapar el mapa base ni las capas GIS."""
     try:
         v = float(r)
     except (TypeError, ValueError):
         v = min_r
     return max(min_r, min(max_r, v))
+
+
+def _ensure_map_panes(fmap: folium.Map) -> None:
+    """Puntos debajo; polígonos GIS encima (evita que el canvas tape las capas)."""
+    from branca.element import MacroElement
+    from jinja2 import Template
+
+    class _BiPanes(MacroElement):
+        _template = Template(
+            """
+            {% macro script(this, kwargs) %}
+                (function () {
+                    var map = {{ this._parent.get_name() }};
+                    if (!map.getPane("biPoints")) {
+                        map.createPane("biPoints");
+                        map.getPane("biPoints").style.zIndex = 450;
+                    }
+                    if (!map.getPane("biGis")) {
+                        map.createPane("biGis");
+                        map.getPane("biGis").style.zIndex = 650;
+                    }
+                })();
+            {% endmacro %}
+            """
+        )
+
+    fmap.add_child(_BiPanes())
 
 
 def _add_circle_batch(
@@ -349,6 +382,7 @@ def _add_circle_batch(
     """
     Círculos individuales en un lote JS (sin MarkerCluster / sin burbujas).
     Filas: [lat, lng, popup, radius, color, tooltip].
+    Pane biPoints (bajo) para no tapar GeoJSON.
     """
     if not rows:
         return
@@ -356,25 +390,27 @@ def _add_circle_batch(
     from folium.map import Layer
     from jinja2 import Template
 
-    payload_rows = rows  # lista Python → tojson en plantilla
-
     class BatchCircleLayer(Layer):
         _template = Template(
             """
             {% macro script(this, kwargs) %}
                 var {{ this.get_name() }} = L.featureGroup();
-                var {{ this.get_name() }}_renderer = L.canvas({ padding: 0.5 });
+                var {{ this.get_name() }}_renderer = L.canvas({
+                    padding: 0.5,
+                    pane: "biPoints"
+                });
                 var {{ this.get_name() }}_data = {{ this.data|tojson }};
                 for (var i = 0; i < {{ this.get_name() }}_data.length; i++) {
                     var r = {{ this.get_name() }}_data[i];
                     var mk = L.circleMarker([r[0], r[1]], {
                         renderer: {{ this.get_name() }}_renderer,
-                        radius: r[3] || 4,
+                        pane: "biPoints",
+                        radius: r[3] || 1.6,
                         color: "#0F172A",
                         fillColor: r[4] || "#334155",
-                        fillOpacity: 0.9,
-                        weight: 1.25,
-                        opacity: 1
+                        fillOpacity: 0.82,
+                        weight: 0.8,
+                        opacity: 0.95
                     });
                     if (r[2]) { mk.bindPopup(r[2], { maxWidth: 380 }); }
                     if (r[5]) {
@@ -396,7 +432,103 @@ def _add_circle_batch(
             self._name = "BatchCircles"
             self.data = data_rows
 
-    BatchCircleLayer(payload_rows, name=name, show=show).add_to(fmap)
+    BatchCircleLayer(rows, name=name, show=show).add_to(fmap)
+
+
+def _add_gis_layers(
+    fmap: folium.Map,
+    selected_ids: tuple[str, ...],
+    *,
+    zone_mode: str = "contorno",
+) -> list[str]:
+    """Añade capas GIS en pane biGis (encima de puntos). Devuelve etiquetas cargadas."""
+    loaded: list[str] = []
+    catalog = {c["id"]: c for c in LAYER_CATALOG}
+    for lid in selected_ids:
+        meta = catalog.get(lid)
+        if not meta:
+            continue
+        data = _load_geojson_dict(lid)
+        if not data or not data.get("features"):
+            continue
+
+        tip_keys = meta.get("tooltip") or []
+        color = meta["color"]
+        name = meta["label"]
+        kind = meta.get("kind", "polygon")
+
+        if kind == "points":
+            rows_pts: list[list[Any]] = []
+            for feat in data["features"]:
+                geom = feat.get("geometry") or {}
+                if geom.get("type") != "Point":
+                    continue
+                coords = geom.get("coordinates") or []
+                if len(coords) < 2:
+                    continue
+                props = feat.get("properties") or {}
+                tip = _tooltip_fields(props, tip_keys)
+                popup = _fmt_popup(
+                    "Fuente: paquete MAPAS ABORDAJE",
+                    {
+                        "Capa": name,
+                        **{k: props.get(k) for k in tip_keys},
+                    },
+                )
+                rows_pts.append(
+                    [
+                        float(coords[1]),
+                        float(coords[0]),
+                        popup,
+                        _scale_radius(2.0),
+                        color,
+                        tip,
+                    ]
+                )
+            _add_circle_batch(fmap, rows_pts, name=name, show=True)
+            loaded.append(name)
+            continue
+
+        sample_props = (
+            (data["features"][0].get("properties") or {}) if data["features"] else {}
+        )
+        fields = [k for k in tip_keys if k in sample_props and k.lower() != "description"]
+        outline_only = zone_mode == "contorno"
+        base_fill = float(meta.get("fill_opacity", 0.04))
+        if zone_mode == "suave":
+            base_fill = max(base_fill, 0.06)
+        if zone_mode == "relleno":
+            base_fill = max(base_fill, 0.14)
+        # Contorno más marcado para verse sobre puntos densos
+        weight = 1.2 if meta.get("heavy") else 2.0
+        gj_kwargs: dict[str, Any] = {
+            "name": name,
+            "style_function": _style_fn(
+                color, base_fill, outline_only=outline_only, weight=weight
+            ),
+            "highlight_function": _highlight_fn(color),
+            "show": True,
+        }
+        if fields:
+            gj_kwargs["tooltip"] = folium.GeoJsonTooltip(
+                fields=fields,
+                aliases=fields,
+                sticky=False,
+                labels=True,
+                style=(
+                    "background-color:white;border:1px solid #ccc;"
+                    "border-radius:4px;padding:6px;font-size:12px;"
+                ),
+            )
+        gj = folium.GeoJson(data, **gj_kwargs)
+        # Encima del canvas de puntos
+        try:
+            gj.options["pane"] = "biGis"
+        except Exception:
+            pass
+        gj.add_to(fmap)
+        loaded.append(name)
+    return loaded
 
 
 def _enrich_hab_con_1x10(hab, sol):
@@ -505,85 +637,13 @@ def _build_map(
         control_scale=True,
         prefer_canvas=True,
     )
-    # Solo el basemap activo (+ resto ocultos solo si hacen falta en control)
     m.add_child(_tile_layer(basemap, show=True))
     for key in BASEMAPS:
         if key == basemap:
             continue
         m.add_child(_tile_layer(key, show=False))
 
-    catalog = {c["id"]: c for c in LAYER_CATALOG}
-    for lid in selected_ids:
-        meta = catalog.get(lid)
-        if not meta:
-            continue
-        data = _load_geojson_dict(lid)
-        if not data or not data.get("features"):
-            continue
-
-        tip_keys = meta.get("tooltip") or []
-        color = meta["color"]
-        name = meta["label"]
-        kind = meta.get("kind", "polygon")
-
-        if kind == "points":
-            rows_pts: list[list[Any]] = []
-            for feat in data["features"]:
-                geom = feat.get("geometry") or {}
-                if geom.get("type") != "Point":
-                    continue
-                coords = geom.get("coordinates") or []
-                if len(coords) < 2:
-                    continue
-                props = feat.get("properties") or {}
-                tip = _tooltip_fields(props, tip_keys)
-                popup = _fmt_popup(
-                    "Fuente: paquete MAPAS ABORDAJE",
-                    {
-                        "Capa": name,
-                        **{k: props.get(k) for k in tip_keys},
-                    },
-                )
-                rows_pts.append(
-                    [
-                        float(coords[1]),
-                        float(coords[0]),
-                        popup,
-                        _scale_radius(4.0),
-                        color,
-                        tip,
-                    ]
-                )
-            _add_circle_batch(m, rows_pts, name=name, show=True)
-        else:
-            sample_props = (
-                (data["features"][0].get("properties") or {}) if data["features"] else {}
-            )
-            fields = [k for k in tip_keys if k in sample_props and k.lower() != "description"]
-            outline_only = zone_mode == "contorno"
-            base_fill = float(meta.get("fill_opacity", 0.04))
-            if zone_mode == "relleno":
-                base_fill = max(base_fill, 0.12)
-            gj_kwargs: dict[str, Any] = {
-                "name": name,
-                "style_function": _style_fn(
-                    color, base_fill, outline_only=outline_only
-                ),
-                "highlight_function": _highlight_fn(color),
-                "show": True,
-            }
-            if fields:
-                gj_kwargs["tooltip"] = folium.GeoJsonTooltip(
-                    fields=fields,
-                    aliases=fields,
-                    sticky=False,
-                    labels=True,
-                    style=(
-                        "background-color:white;border:1px solid #ccc;"
-                        "border-radius:4px;padding:6px;font-size:12px;"
-                    ),
-                )
-            folium.GeoJson(data, **gj_kwargs).add_to(m)
+    _ensure_map_panes(m)
 
     def _read(b: bytes) -> pd.DataFrame:
         if not b:
@@ -594,7 +654,7 @@ def _build_map(
     coin = _read(coin_bytes)
     hab = _read(hab_bytes)
 
-    # Puntos en lote JS (mismos círculos/popups; sin crear ~40k objetos Python Folium)
+    # 1) Puntos primero (pane biPoints, debajo)
     if show_solo and not solo.empty:
         if "cantidad_casos" not in solo.columns and "n_reportes" in solo.columns:
             solo = solo.copy()
@@ -603,7 +663,7 @@ def _build_map(
         for r in solo.dropna(subset=["lat", "lng"]).itertuples(index=False):
             n = _volumen_casos(r)
             color = _color_por_volumen(n)
-            radius = _scale_radius(_radius_por_volumen(n) + 1.5, min_r=4.0)
+            radius = _scale_radius(_radius_por_volumen(n), min_r=1.4, max_r=4.5)
             dir_show = getattr(r, "direccion_display", None) or getattr(
                 r, "direccion", ""
             )
@@ -635,7 +695,7 @@ def _build_map(
         rows = []
         for r in coin.dropna(subset=["lat", "lng"]).itertuples(index=False):
             n = _volumen_casos(r)
-            radius = _scale_radius(_radius_por_volumen(n) + 1.5, min_r=4.0)
+            radius = _scale_radius(_radius_por_volumen(n), min_r=1.4, max_r=4.5)
             dist = getattr(r, "match_dist_m", None)
             popup = _fmt_popup(
                 "Fuente: 1×10 + Habitable (cruzado)",
@@ -693,7 +753,7 @@ def _build_map(
                     float(r.lat),
                     float(r.lng),
                     popup,
-                    _scale_radius(4.5, min_r=4.0),
+                    _scale_radius(1.8, min_r=1.5, max_r=3.0),
                     color,
                     tip,
                 ]
@@ -704,6 +764,9 @@ def _build_map(
             name=f"Habitable semáforo · {len(rows):,}".replace(",", "."),
             show=True,
         )
+
+    # 2) Capas GIS encima (pane biGis)
+    _add_gis_layers(m, selected_ids, zone_mode=zone_mode)
 
     folium.LayerControl(collapsed=True, position="topright").add_to(m)
     return m.get_root().render()
@@ -1163,7 +1226,7 @@ def _render_abordaje_mapa(
             show_coin=show_coin,
             show_hab=show_hab,
             zone_mode=zone_mode,
-            viz_version=3,
+            viz_version=4,
         )
     components.html(html, height=700, scrolling=False)
 
@@ -1200,7 +1263,7 @@ def _cached_abordaje_html(
     show_coin: bool = False,
     show_hab: bool = False,
     zone_mode: str = "contorno",
-    viz_version: int = 3,
+    viz_version: int = 4,
 ) -> str:
     return _build_map(
         selected_ids,
