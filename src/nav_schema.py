@@ -95,6 +95,18 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             ),
         ),
     ),
+    NavSection(
+        id="abordaje",
+        label="Mapas de abordaje",
+        blurb="Planificación territorial + pendientes 1×10 y Habitable (semáforo).",
+        items=(
+            NavItem(
+                "abordaje_capas",
+                "Capas y puntos del cruce",
+                "Máscaras, cuadrículas, pendientes y semáforo Habitable.",
+            ),
+        ),
+    ),
 )
 
 HOME_ID = "inicio"
