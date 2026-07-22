@@ -71,12 +71,29 @@ def donut(title: str, labels: Sequence[str], values: Sequence[float], colors: Se
                 "center": ["50%", "52%"],
                 "avoidLabelOverlap": True,
                 "itemStyle": {"borderRadius": 4, "borderColor": "#FFFFFF", "borderWidth": 2},
-                "label": {"show": False},
+                "label": {
+                    "show": True,
+                    "formatter": "{b}\n{d}%",
+                    "color": "#0C2340",
+                    "fontSize": 11,
+                    "fontWeight": 600,
+                    "lineHeight": 14,
+                },
                 "emphasis": {
-                    "label": {"show": True, "fontSize": 12, "fontWeight": "bold", "color": "#0C2340"},
+                    "label": {
+                        "show": True,
+                        "fontSize": 12,
+                        "fontWeight": "bold",
+                        "color": "#0C2340",
+                    },
                     "scale": True,
                 },
-                "labelLine": {"show": False},
+                "labelLine": {
+                    "show": True,
+                    "length": 10,
+                    "length2": 8,
+                    "lineStyle": {"color": "#94A3B8"},
+                },
                 "data": data,
             }
         ],

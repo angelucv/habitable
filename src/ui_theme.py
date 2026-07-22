@@ -895,6 +895,10 @@ def render_home_index(
             "Cada bloque es una fuente distinta, con su propio corte de datos."
         )
 
+        from streamlit_echarts import st_echarts
+
+        from charts_echarts import ETIQUETA_COLORS, donut
+
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(
@@ -919,6 +923,20 @@ def render_home_index(
                         "value": _fn(n_1x10),
                         "tone": "info",
                     },
+                ]
+            )
+            st_echarts(
+                donut(
+                    f"Atención · {pct_at:.1f}% ya atendidas",
+                    ["Ya atendidas", "Pendientes"],
+                    [n_atend, n_pend],
+                    ["#1F6B4A", "#B45309"],
+                ),
+                height="300px",
+                key="home_donut_1x10",
+            )
+            render_kpi_rows(
+                [
                     {
                         "label": "Ya atendidas",
                         "value": _fn(n_atend),
@@ -956,6 +974,23 @@ def render_home_index(
                         "value": _fn(n_hab),
                         "tone": "info",
                     },
+                ]
+            )
+            labs_hab = ["Verde", "Amarillo", "Rojo", "Negro"]
+            vals_hab = [n_verde, n_ama, n_rojo, n_neg]
+            cols_hab = [
+                ETIQUETA_COLORS["VERDE"],
+                ETIQUETA_COLORS["AMARILLO"],
+                ETIQUETA_COLORS["ROJO"],
+                ETIQUETA_COLORS["NEGRO"],
+            ]
+            st_echarts(
+                donut("Distribución por etiqueta", labs_hab, vals_hab, cols_hab),
+                height="300px",
+                key="home_donut_hab",
+            )
+            render_kpi_rows(
+                [
                     {
                         "label": "Verde",
                         "value": _fn(n_verde),
