@@ -897,7 +897,7 @@ def render_home_index(
 
         from streamlit_echarts import st_echarts
 
-        from charts_echarts import ETIQUETA_COLORS, donut
+        from charts_echarts import ETIQUETA_COLORS, HOME_1X10_COLORS, donut
 
         col_a, col_b = st.columns(2)
         with col_a:
@@ -930,7 +930,10 @@ def render_home_index(
                     f"Atención · {pct_at:.1f}% ya atendidas",
                     ["Ya atendidas", "Pendientes"],
                     [n_atend, n_pend],
-                    ["#1F6B4A", "#B45309"],
+                    [
+                        HOME_1X10_COLORS["atendidas"],
+                        HOME_1X10_COLORS["pendientes"],
+                    ],
                 ),
                 height="300px",
                 key="home_donut_1x10",
@@ -940,13 +943,13 @@ def render_home_index(
                     {
                         "label": "Ya atendidas",
                         "value": _fn(n_atend),
-                        "tone": "success",
+                        "tone": "info",
                         "hint": f"{pct_at:.1f}% · vía cruce",
                     },
                     {
                         "label": "Pendientes",
                         "value": _fn(n_pend),
-                        "tone": "warning",
+                        "tone": "muted",
                         "hint": "Sin cruce útil aún",
                     },
                 ]

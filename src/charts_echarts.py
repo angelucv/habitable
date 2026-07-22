@@ -16,12 +16,19 @@ PALETTE = [
     "#64748B",  # slate
 ]
 
+# Semáforo Habitable (colores de etiqueta, legibles en fondo claro)
 ETIQUETA_COLORS = {
-    "VERDE": "#1F6B4A",
-    "AMARILLO": "#B45309",
-    "ROJO": "#9B2C2C",
-    "NEGRO": "#334155",
+    "VERDE": "#15803D",
+    "AMARILLO": "#EAB308",
+    "ROJO": "#CF142B",
+    "NEGRO": "#0F172A",
     "SIN": "#94A3B8",
+}
+
+# Demanda 1×10 en Inicio: navy ejecutivo (sin semáforo, para no confundir)
+HOME_1X10_COLORS = {
+    "atendidas": "#0C2340",  # navy institucional
+    "pendientes": "#5B7C99",  # acero suave
 }
 
 MATCH_COLORS = {
