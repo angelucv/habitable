@@ -1,4 +1,4 @@
-﻿# Producción (Render) — rutas solo para reprocesar vía UI/uploads
+# Produccion (Render) - rutas solo para reprocesar via UI/uploads
 [sources]
 solicitudes_1x10 = 'data/uploads/1x10.xlsx'
 inspecciones_habitable = 'data/uploads/habitable.csv'

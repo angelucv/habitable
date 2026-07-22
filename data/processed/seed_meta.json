@@ -1,11 +1,12 @@
-﻿{
-    "coincide_auto":  4705,
-    "n_hab":  17290,
-    "dedupe_modo":  "estricto_gps_direccion_tipologia",
-    "origen":  "precarga_despliegue",
-    "solo_1x10":  22400,
-    "generado_en":  "2026-07-21T22:32:19+00:00",
-    "nota":  "Corte tipología/encoding estricto. Sustituye seed previo; regenerable desde UI.",
-    "corte_generado_en":  "2026-07-21 17:49",
-    "n_1x10":  33251
+{
+  "origen": "precarga_despliegue",
+  "generado_en": "2026-07-22T15:51:46+00:00",
+  "nota": "Corte Habitable 22/07/2026 11:35 VE; rematch sobre seed 1x10 vigente.",
+  "corte_generado_en": "2026-07-22 11:51",
+  "n_1x10": 33251,
+  "n_hab": 19126,
+  "coincide_auto": 4886,
+  "solo_1x10": 22114,
+  "dedupe_modo": "estricto_gps_direccion_tipologia",
+  "corte_habitable_archivo": "habitable_inspecciones_2026-07-22_15-35-53.csv"
 }
