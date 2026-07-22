@@ -24,113 +24,149 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
     NavSection(
         id="fuentes",
         label="Información general por fuentes",
-        blurb="Volumen y distribución de cada fuente: 1×10 y Habitable.",
+        blurb="Panorama de cada origen de datos por separado: volumen, calidad y tipología.",
         items=(
             NavItem(
                 "fuentes_1x10",
                 "Fuente 1×10",
-                "Registros, cruce, GPS y territorio de la demanda ciudadana.",
+                "Conteos de demanda ciudadana, cruce con Habitable, calidad GPS y territorio.",
             ),
             NavItem(
                 "fuentes_hab",
                 "Fuente Habitable",
-                "Semáforo (4 etiquetas), estado/municipio y tipología.",
+                "Semáforo V/A/R/N, tipología de daños y corte por estado o municipio.",
             ),
         ),
     ),
     NavSection(
         id="mapa",
         label="Mapa operativo",
-        blurb="Cruce espacial 1×10 × Habitable sobre el territorio.",
+        blurb="Vista territorial del cruce espacial entre solicitudes 1×10 e inspecciones.",
         items=(
-            NavItem("mapa_vista", "Mapa y capas", "Vista, capas, búsqueda y puntos."),
+            NavItem(
+                "mapa_vista",
+                "Mapa y capas",
+                "Capas del cruce, búsqueda de puntos y lectura operativa del territorio.",
+            ),
         ),
     ),
     NavSection(
         id="x10",
         label="Análisis 1×10",
-        blurb="Demanda ciudadana: depuración, territorio y cola.",
+        blurb="De la calidad del Excel a la cola de casos aún sin inspección cercana.",
         items=(
-            NavItem("x10_depuracion", "Depuración", "Limpieza del Excel y calidad GPS."),
+            NavItem(
+                "x10_depuracion",
+                "Depuración",
+                "Limpieza del archivo 1×10, duplicados y calidad de coordenadas.",
+            ),
             NavItem(
                 "x10_analisis",
                 "Territorio y cruce",
-                "Volumen, estados, parroquias y % atendidas.",
+                "Volumen por estado y parroquia, y porcentaje ya atendido vía cruce.",
             ),
             NavItem(
                 "x10_cola",
                 "Cola pendientes",
-                "Casos 1×10 sin cruce, listos para contacto.",
+                "Casos sin cruce útil, priorizados para contacto o visita de campo.",
             ),
         ),
     ),
     NavSection(
         id="hab",
         label="Análisis Habitable",
-        blurb="Resultado de campo: semáforo y tipología de daños.",
+        blurb="Resultado de las inspecciones de campo: semáforo y tipología de daños.",
         items=(
-            NavItem("hab_matriz", "Matriz semáforo", "Mezcla verde/amarillo/rojo por territorio."),
-            NavItem("hab_ne", "No estructurales", "Daños no estructurales."),
-            NavItem("hab_mod", "Estructurales moderados", "Bandas moderadas."),
-            NavItem("hab_sev", "Severos y externos", "Daño severo y riesgo externo."),
-            NavItem("hab_explorar", "Explorar / reportería", "Análisis libre (PyGWalker)."),
+            NavItem(
+                "hab_matriz",
+                "Matriz semáforo",
+                "Mezcla verde / amarillo / rojo / negro por territorio.",
+            ),
+            NavItem(
+                "hab_ne",
+                "No estructurales",
+                "Daños no estructurales: foco operativo y volumen por zona.",
+            ),
+            NavItem(
+                "hab_mod",
+                "Estructurales moderados",
+                "Bandas de daño estructural moderado para seguimiento.",
+            ),
+            NavItem(
+                "hab_sev",
+                "Severos y externos",
+                "Daño severo y riesgo externo: prioridad de evacuación o refuerzo.",
+            ),
+            NavItem(
+                "hab_explorar",
+                "Explorar / reportería",
+                "Análisis libre con PyGWalker para cortes ad hoc y reportería.",
+            ),
         ),
     ),
     NavSection(
         id="pend",
         label="1×10 pendientes",
-        blurb="Ubicaciones pendientes: mapa, listado y diagnóstico.",
+        blurb="Operación sobre la cola pendiente: mapa, listados y diagnóstico del cruce.",
         items=(
-            NavItem("pend_mapa", "Mapa", "Puntos y densidad de pendientes."),
-            NavItem("pend_listado", "Listado y descargas", "Filtros y Excel/CSV."),
+            NavItem(
+                "pend_mapa",
+                "Mapa",
+                "Puntos pendientes y densidad para orientar despliegue en campo.",
+            ),
+            NavItem(
+                "pend_listado",
+                "Listado y descargas",
+                "Filtros, tablas y exportación Excel/CSV para equipos territoriales.",
+            ),
             NavItem(
                 "pend_descripcion",
                 "Análisis de descripción",
-                "Heurística sobre texto de la solicitud.",
+                "Lectura heurística del texto de la solicitud (señales de urgencia).",
             ),
             NavItem(
                 "pend_diagnostico",
                 "Por qué cruzan pocos",
-                "Diagnóstico del matching espacial.",
+                "Diagnóstico del matching espacial: radio, nombres y GPS dudoso.",
             ),
         ),
     ),
     NavSection(
         id="abordaje",
         label="Mapas de abordaje",
-        blurb="Planificación territorial + pendientes 1×10 y Habitable (semáforo).",
+        blurb="Planificación territorial con máscaras, cuadrículas y semáforo Habitable.",
         items=(
             NavItem(
                 "abordaje_capas",
                 "Capas y puntos del cruce",
-                "Máscaras, cuadrículas, pendientes y semáforo Habitable.",
+                "Máscaras, cuadrículas de abordaje, pendientes 1×10 y etiqueta de campo.",
             ),
         ),
     ),
     NavSection(
         id="nasa",
         label="Mapa NASA",
-        blurb="Sentinel-1 cruzado con 1×10, Habitable e IA: mapa y análisis por fuente.",
+        blurb="Señal Sentinel-1 cruzada con 1×10, Habitable e inventario IA.",
         items=(
             NavItem(
                 "nasa_mapa",
                 "Capas NASA y cruces",
-                "Daño probable, coincidencias e inventario muestreado.",
+                "Daño probable por radar, coincidencias con fuentes locales e inventario.",
             ),
             NavItem(
                 "nasa_1x10",
                 "Análisis 1×10 × NASA",
-                "Cola prioritaria y calor para orientar siguientes casos.",
+                "Cola prioritaria y mapas de calor para orientar los siguientes casos.",
             ),
             NavItem(
                 "nasa_hab",
                 "Análisis Habitable × NASA",
-                "Confiabilidad del radar vs semáforo de campo; zonas de calor.",
+                "Confiabilidad radar vs semáforo de campo; zonas de mayor divergencia.",
             ),
             NavItem(
                 "nasa_ia",
                 "Análisis IA × NASA",
-                "Acuerdo óptico↔radar, doble alerta y mapas de calor.",
+                "Acuerdo óptico↔radar, doble alerta y calor para priorización.",
             ),
         ),
     ),

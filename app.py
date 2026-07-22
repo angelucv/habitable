@@ -164,7 +164,13 @@ def main():
     inject_executive_css()
 
     from nav_schema import HOME_ID, find_section, resolve_nav
-    from ui_theme import render_home_index, render_section, render_section_subtabs, render_sidebar_nav
+    from ui_theme import (
+        render_back_to_index,
+        render_home_index,
+        render_section,
+        render_section_subtabs,
+        render_sidebar_nav,
+    )
 
     if "nav_item" not in st.session_state:
         st.session_state["nav_item"] = HOME_ID
@@ -286,6 +292,7 @@ def main():
         render_home_index(summary, hab)
         return
 
+    render_back_to_index()
     render_section(sec.label, sec.blurb)
     item_id = render_section_subtabs(sec)
     st.session_state["nav_item"] = item_id

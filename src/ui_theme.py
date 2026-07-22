@@ -193,7 +193,7 @@ def inject_executive_css() -> None:
             opacity: 1 !important;
         }}
 
-        /* —— Índice inicio —— */
+        /* —— Índice ejecutivo (sin tarjetas apiladas) —— */
         .nav-index {{
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -230,6 +230,104 @@ def inject_executive_css() -> None:
         }}
         .nav-index-card li {{
             margin: 0.15rem 0;
+        }}
+        .nav-index-incluye {{
+            color: {INK};
+            font-size: 0.84rem;
+            margin: 0;
+            line-height: 1.45;
+        }}
+        .nav-index-incluye strong {{
+            color: {NAVY};
+            font-weight: 700;
+        }}
+        .nav-exec {{
+            margin: 0.25rem 0 1.35rem 0;
+            border-top: 1px solid {LINE};
+        }}
+        .nav-exec-sec {{
+            padding: 1.05rem 0 0.95rem 0;
+            border-bottom: 1px solid {LINE};
+        }}
+        .nav-exec-sec-title {{
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: {NAVY};
+            margin: 0 0 0.25rem 0;
+            line-height: 1.25;
+        }}
+        .nav-exec-sec-blurb {{
+            color: {MUTED};
+            font-size: 0.9rem;
+            margin: 0 0 0.7rem 0;
+            line-height: 1.45;
+        }}
+        .nav-exec-item {{
+            padding: 0.15rem 0 0.55rem 0.75rem;
+            border-left: 2px solid {LINE};
+            margin: 0 0 0.15rem 0.1rem;
+        }}
+        .nav-exec-item-blurb {{
+            font-size: 0.84rem;
+            color: {MUTED};
+            margin: 0.05rem 0 0 0;
+            line-height: 1.4;
+            padding-left: 0.05rem;
+        }}
+        /* Nombres del índice como vínculos (sin botón-caja) */
+        div[class*="st-key-home_go_item_"] button {{
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+            height: auto !important;
+            justify-content: flex-start !important;
+            color: {STEEL} !important;
+            font-weight: 700 !important;
+            font-size: 0.95rem !important;
+            text-align: left !important;
+        }}
+        div[class*="st-key-home_go_item_"] button p,
+        div[class*="st-key-home_go_item_"] button span {{
+            color: {STEEL} !important;
+            font-weight: 700 !important;
+            text-align: left !important;
+        }}
+        div[class*="st-key-home_go_item_"] button:hover {{
+            background: transparent !important;
+            color: {NAVY} !important;
+            text-decoration: underline !important;
+        }}
+        div[class*="st-key-home_go_item_"] button:hover p,
+        div[class*="st-key-home_go_item_"] button:hover span {{
+            color: {NAVY} !important;
+        }}
+        .nav-back {{
+            margin: 0 0 0.75rem 0;
+        }}
+        div[class*="st-key-nav_back_home"] button {{
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+            height: auto !important;
+            justify-content: flex-start !important;
+            color: {STEEL} !important;
+            font-weight: 600 !important;
+            font-size: 0.88rem !important;
+        }}
+        div[class*="st-key-nav_back_home"] button p,
+        div[class*="st-key-nav_back_home"] button span {{
+            color: {STEEL} !important;
+            font-weight: 600 !important;
+        }}
+        div[class*="st-key-nav_back_home"] button:hover {{
+            background: transparent !important;
+            text-decoration: underline !important;
+            color: {NAVY} !important;
         }}
         .nav-crumb {{
             color: {MUTED};
@@ -374,6 +472,53 @@ def inject_executive_css() -> None:
             font-size: 0.72rem;
             color: {MUTED};
             margin-top: 0.1rem;
+            white-space: nowrap;
+        }}
+
+        /* Franja KPI compacta (inicio: total → desglose → torta) */
+        .kpi-inline {{
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: flex-end;
+            gap: 0.35rem 0.85rem;
+            margin: 0.35rem 0 0.15rem 0;
+            padding: 0.15rem 0 0.35rem 0;
+            overflow-x: auto;
+        }}
+        .kpi-inline-item {{
+            flex: 1 1 0;
+            min-width: 0;
+            text-align: left;
+        }}
+        .kpi-inline-item + .kpi-inline-item {{
+            border-left: 1px solid {LINE};
+            padding-left: 0.75rem;
+        }}
+        .kpi-inline-label {{
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: {MUTED};
+            line-height: 1.2;
+            margin-bottom: 0.12rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .kpi-inline-value {{
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            line-height: 1.1;
+            white-space: nowrap;
+        }}
+        .kpi-inline-pct {{
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: {MUTED};
+            margin-top: 0.08rem;
+            line-height: 1.2;
             white-space: nowrap;
         }}
 
@@ -786,6 +931,31 @@ def render_kpi_rows(items: list[dict]) -> None:
     )
 
 
+def render_kpi_inline(items: list[dict]) -> None:
+    """
+    Desglose compacto en una sola franja (estilo panel ejecutivo).
+    items: [{label, value, color, pct?}] — sin tarjetas.
+    """
+    cells = []
+    for it in items:
+        color = it.get("color") or NAVY
+        pct = (
+            f'<div class="kpi-inline-pct">{it["pct"]}</div>'
+            if it.get("pct")
+            else ""
+        )
+        cells.append(
+            f'<div class="kpi-inline-item">'
+            f'<div class="kpi-inline-label">{it["label"]}</div>'
+            f'<div class="kpi-inline-value" style="color:{color}">{it["value"]}</div>'
+            f"{pct}</div>"
+        )
+    st.markdown(
+        f'<div class="kpi-inline">{"".join(cells)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_sidebar_nav(active_item: str) -> str:
     """
     Menú izquierdo: Inicio + secciones (las pestañas van en la pantalla).
@@ -925,6 +1095,23 @@ def render_home_index(
                     },
                 ]
             )
+            pct_pend = 100.0 * n_pend / max(n_atend + n_pend, 1)
+            render_kpi_inline(
+                [
+                    {
+                        "label": "Ya atendidas",
+                        "value": _fn(n_atend),
+                        "color": HOME_1X10_COLORS["atendidas"],
+                        "pct": f"{pct_at:.1f}%",
+                    },
+                    {
+                        "label": "Pendientes",
+                        "value": _fn(n_pend),
+                        "color": HOME_1X10_COLORS["pendientes"],
+                        "pct": f"{pct_pend:.1f}%",
+                    },
+                ]
+            )
             st_echarts(
                 donut(
                     f"Atención · {pct_at:.1f}% ya atendidas",
@@ -935,24 +1122,8 @@ def render_home_index(
                         HOME_1X10_COLORS["pendientes"],
                     ],
                 ),
-                height="300px",
+                height="280px",
                 key="home_donut_1x10",
-            )
-            render_kpi_rows(
-                [
-                    {
-                        "label": "Ya atendidas",
-                        "value": _fn(n_atend),
-                        "tone": "info",
-                        "hint": f"{pct_at:.1f}% · vía cruce",
-                    },
-                    {
-                        "label": "Pendientes",
-                        "value": _fn(n_pend),
-                        "tone": "muted",
-                        "hint": "Sin cruce útil aún",
-                    },
-                ]
             )
         with col_b:
             st.markdown(
@@ -987,38 +1158,38 @@ def render_home_index(
                 ETIQUETA_COLORS["ROJO"],
                 ETIQUETA_COLORS["NEGRO"],
             ]
-            st_echarts(
-                donut("Distribución por etiqueta", labs_hab, vals_hab, cols_hab),
-                height="300px",
-                key="home_donut_hab",
-            )
-            render_kpi_rows(
+            render_kpi_inline(
                 [
                     {
                         "label": "Verde",
                         "value": _fn(n_verde),
-                        "tone": "success",
-                        "hint": f"{100 * n_verde / max(n_hab, 1):.1f}%",
+                        "color": ETIQUETA_COLORS["VERDE"],
+                        "pct": f"{100 * n_verde / max(n_hab, 1):.1f}%",
                     },
                     {
                         "label": "Amarillo",
                         "value": _fn(n_ama),
-                        "tone": "flag",
-                        "hint": f"{100 * n_ama / max(n_hab, 1):.1f}%",
+                        "color": ETIQUETA_COLORS["AMARILLO"],
+                        "pct": f"{100 * n_ama / max(n_hab, 1):.1f}%",
                     },
                     {
                         "label": "Rojo",
                         "value": _fn(n_rojo),
-                        "tone": "warning",
-                        "hint": f"{100 * n_rojo / max(n_hab, 1):.1f}%",
+                        "color": ETIQUETA_COLORS["ROJO"],
+                        "pct": f"{100 * n_rojo / max(n_hab, 1):.1f}%",
                     },
                     {
                         "label": "Negro",
                         "value": _fn(n_neg),
-                        "tone": "muted",
-                        "hint": f"{100 * n_neg / max(n_hab, 1):.1f}%",
+                        "color": ETIQUETA_COLORS["NEGRO"],
+                        "pct": f"{100 * n_neg / max(n_hab, 1):.1f}%",
                     },
                 ]
+            )
+            st_echarts(
+                donut("Distribución por etiqueta", labs_hab, vals_hab, cols_hab),
+                height="280px",
+                key="home_donut_hab",
             )
 
         st.caption(
@@ -1029,33 +1200,57 @@ def render_home_index(
 
     render_section(
         "Índice del tablero",
-        "Elige una sección en el menú izquierdo. Dentro de cada sección "
-        "verás sus pestañas en la pantalla principal.",
+        "Pulsa el nombre de una subsección para abrirla. Desde cualquier pantalla "
+        "puedes volver al índice general.",
     )
 
-    cards = []
-    for sec in NAV_SECTIONS:
-        lis = "".join(f"<li><strong>{it.label}</strong> — {it.blurb}</li>" for it in sec.items)
-        cards.append(
-            f'<div class="nav-index-card">'
-            f"<h3>{sec.label}</h3>"
-            f"<p>{sec.blurb}</p>"
-            f"<ul>{lis}</ul>"
-            f"</div>"
-        )
-    st.markdown(f'<div class="nav-index">{"".join(cards)}</div>', unsafe_allow_html=True)
+    mid = (len(NAV_SECTIONS) + 1) // 2
+    left_secs = NAV_SECTIONS[:mid]
+    right_secs = NAV_SECTIONS[mid:]
 
-    st.caption("Atajo: entra directo a una sección.")
-    cols = st.columns(2)
-    for i, sec in enumerate(NAV_SECTIONS):
-        with cols[i % 2]:
-            if st.button(
-                f"Abrir · {sec.label}",
-                key=f"home_go_sec_{sec.id}",
-                use_container_width=True,
-            ):
-                st.session_state["nav_item"] = sec.items[0].id
-                st.rerun()
+    def _render_exec_column(sections: tuple) -> None:
+        for sec in sections:
+            st.markdown(
+                f'<div class="nav-exec-sec">'
+                f'<div class="nav-exec-sec-title">{sec.label}</div>'
+                f'<div class="nav-exec-sec-blurb">{sec.blurb}</div>'
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            for it in sec.items:
+                st.markdown('<div class="nav-exec-item">', unsafe_allow_html=True)
+                if st.button(
+                    it.label,
+                    key=f"home_go_item_{it.id}",
+                    use_container_width=False,
+                ):
+                    st.session_state["nav_item"] = it.id
+                    st.rerun()
+                st.markdown(
+                    f'<div class="nav-exec-item-blurb">{it.blurb}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+    col_l, col_r = st.columns(2, gap="large")
+    with col_l:
+        st.markdown('<div class="nav-exec">', unsafe_allow_html=True)
+        _render_exec_column(left_secs)
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col_r:
+        st.markdown('<div class="nav-exec">', unsafe_allow_html=True)
+        _render_exec_column(right_secs)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_back_to_index() -> None:
+    """Vínculo ejecutivo para volver al índice general."""
+    from nav_schema import HOME_ID
+
+    st.markdown('<div class="nav-back">', unsafe_allow_html=True)
+    if st.button("← Índice general", key="nav_back_home"):
+        st.session_state["nav_item"] = HOME_ID
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_page_crumb(section_label: str, item_label: str) -> None:
