@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -175,20 +172,32 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     st.markdown("#### Descargar Excel depurado (caso a caso)")
-    st.caption(
-        "Una fila = un **código de caso** (vecino a contactar), con "
-        "`codigo_caso`, `denunciante`, `telefono` y cédula. "
-        "No se agrupa por edificio: si varios reportes caen en la misma "
-        "ubicación, cada caso sigue saliendo aparte. "
-        "También: `estatus_para_contacto`, `en_cola_pendiente`, "
-        "`cruzado_con_habitable`, `estatus_inspeccion_habitable`. "
-        "La columna `direccion` ya viene con encoding corregido "
-        "(`direccion_raw` = original)."
-    )
+    from auth_gate import can_see_contact
+
+    if not can_see_contact():
+        st.warning(
+            "Su rol (**ejecutivo**) no tiene permiso para ver ni descargar "
+            "datos de contacto (cédula, denunciante, teléfonos). "
+            "Use un usuario **operador** o **admin** para la cola de contacto."
+        )
+        st.caption(
+            "Los indicadores y mapas de esta sección siguen disponibles sin PII."
+        )
+    else:
+        st.caption(
+            "Una fila = un **código de caso** (vecino a contactar), con "
+            "`codigo_caso`, `denunciante`, `telefono` y cédula. "
+            "No se agrupa por edificio: si varios reportes caen en la misma "
+            "ubicación, cada caso sigue saliendo aparte. "
+            "También: `estatus_para_contacto`, `en_cola_pendiente`, "
+            "`cruzado_con_habitable`, `estatus_inspeccion_habitable`. "
+            "La columna `direccion` ya viene con encoding corregido "
+            "(`direccion_raw` = original)."
+        )
     _contact_cols = [
         c for c in ("codigo_caso", "denunciante", "telefono") if c in sol.columns
     ]
-    if len(_contact_cols) < 3:
+    if can_see_contact() and len(_contact_cols) < 3:
         st.warning(
             "Faltan columnas de contacto en los datos cargados "
             "(denunciante / teléfono). Regenera el parquet desde el Excel 1×10 "
@@ -325,6 +334,11 @@ inspección** (verde/amarillo/rojo/negro) y flags de revisión.
     try:
         if filtrado.empty:
             st.warning("Sin filas con los filtros actuales. Amplía la selección.")
+        elif not can_see_contact():
+            st.error(
+                "Descarga de Excel con contacto bloqueada para su rol. "
+                "Solicite acceso operador/admin."
+            )
         else:
             xlsx = excel_bytes_depurado(filtrado)
             st.download_button(
@@ -435,12 +449,29 @@ def page_1x10(sol: pd.DataFrame, summary: dict, sub: str = "x10_analisis"):
             f"Mostrando hasta 500 de {fmt_num(len(pend))} casos pendientes "
             f"(una fila por código)."
         )
-        st.download_button(
-            "Descargar cola pendiente caso a caso (CSV)",
-            data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
-            file_name="cola_pendiente_1x10_casos.csv",
-            mime="text/csv",
-        )
+        from auth_gate import can_see_contact
+
+        if can_see_contact() and any(
+            c in show_cols for c in ("cedula", "denunciante", "telefono")
+        ):
+            st.download_button(
+                "Descargar cola pendiente caso a caso (CSV)",
+                data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
+                file_name="cola_pendiente_1x10_casos.csv",
+                mime="text/csv",
+            )
+        elif not can_see_contact():
+            st.info(
+                "Descarga con contacto no disponible para rol ejecutivo. "
+                "La tabla en pantalla tampoco incluye cédula/teléfono."
+            )
+        else:
+            st.download_button(
+                "Descargar cola pendiente (CSV sin contacto)",
+                data=pend[show_cols].to_csv(index=False).encode("utf-8-sig"),
+                file_name="cola_pendiente_1x10_casos.csv",
+                mime="text/csv",
+            )
         return
 
     alta = int((work["match_cat"] == "coincide_alta").sum())
@@ -635,68 +666,13 @@ def page_habitable(hab: pd.DataFrame, summary: dict, sub: str = "hab_matriz"):
     if sub == "hab_matriz":
         _tab_matriz_semaforo(hab)
     elif sub == "hab_explorar":
-        _tab_explorar_perspective(hab)
+        _tab_explorar_pygwalker(hab)
     elif sub == "hab_ne":
         _tab_no_estructural(hab)
     elif sub == "hab_mod":
         _tab_moderado(hab)
     else:
         _tab_severo_externo(hab)
-
-
-def _tab_explorar_perspective(hab: pd.DataFrame):
-    """Ensayo local: Perspective (pivot/filtro/gráfico) en lugar de PyGWalker."""
-    from ui_theme import render_section
-
-    render_section(
-        "Explorar / reportería (Perspective · ensayo)",
-        "Pivot, filtros y gráficos en el navegador (WASM). Ensayo local para "
-        "evaluar si sustituye a PyGWalker.",
-    )
-    st.caption(
-        "Herramienta: Perspective. No publicar en prod hasta validar rendimiento "
-        "y usabilidad con el equipo."
-    )
-
-    base = _hab_filters(hab, "explore")
-    explore = habitable_explore_frame(base)
-    if explore.empty:
-        st.warning("Sin filas en el filtro actual.")
-        return
-
-    st.info(
-        f"Universo del filtro · {fmt_num(len(explore))} inspecciones · "
-        f"{len(explore.columns)} campos. "
-        "Prueba pivotes por `etiqueta` / `estado` y cambia el plugin (tabla o gráfico)."
-    )
-
-    with st.expander("Campos disponibles en esta vista", expanded=False):
-        st.write(", ".join(explore.columns.tolist()))
-
-    # Serialización JSON-safe (NaN/Inf → null; fechas → texto)
-    work = explore.copy()
-    for c in work.columns:
-        if pd.api.types.is_datetime64_any_dtype(work[c]):
-            work[c] = work[c].dt.strftime("%Y-%m-%d %H:%M:%S")
-    # to_json convierte NaN → null (dict(orient=records) deja NaN inválido en JSON)
-    rows = json.loads(work.to_json(orient="records", date_format="iso"))
-
-    try:
-        from streamlit_perspective import perspective_static
-    except Exception:
-        # Prod / entornos sin el paquete: mantener PyGWalker.
-        _tab_explorar_pygwalker(hab)
-        return
-
-    perspective_static(
-        rows,
-        height=780,
-        config={
-            "plugin": "datagrid",
-            "settings": True,
-        },
-        key="hab_perspective_explore",
-    )
 
 
 def _tab_explorar_pygwalker(hab: pd.DataFrame):
@@ -1345,139 +1321,54 @@ una sola vez.
         pend = pend.copy()
         pend["n_reportes"] = pend["cantidad_casos"]
 
+    todos = frame_ubicaciones_inspeccion(
+        sol,
+        solo_pendientes=False,
+        solo_mapa_ok=not incluir_gps_dudoso,
+        estados=filt_est or None,
+        municipios=filt_mun or None,
+        parroquias=filt_parr or None,
+        min_casos=min_eff,
+    )
     rp = resumen_ubicaciones(pend)
 
-    # Firma del filtro activo (tabla/mapa). Streamlit puede servir un
-    # download_button con payload viejo si el key no cambia con el filtro.
-    filt_payload = {
-        "est": sorted(filt_est or []),
-        "mun": sorted(filt_mun or []),
-        "parr": sorted(filt_parr or []),
-        "min": int(min_eff),
-        "gps_dudoso": bool(incluir_gps_dudoso),
-        "n_pend": int(len(pend)),
-    }
-    filt_sig = hashlib.sha1(
-        json.dumps(filt_payload, ensure_ascii=True, sort_keys=True).encode(
-            "utf-8"
-        )
-    ).hexdigest()[:12]
-    export_ss = "ri_export_bytes"
-    export = st.session_state.get(export_ss)
-    export_ok = isinstance(export, dict) and export.get("sig") == filt_sig
-
-    extra_gps = (
-        f" · ocultos por GPS dudoso/mar: **{fmt_num(n_excl_gps)}**"
-        if (not incluir_gps_dudoso and n_excl_gps)
-        else ""
-    )
-    alcance = []
-    if filt_est:
-        alcance.append(
-            "Estados: "
-            + ", ".join(filt_est[:3])
-            + ("…" if len(filt_est) > 3 else "")
-        )
-    else:
-        alcance.append("Estados: todos")
-    if filt_mun:
-        alcance.append(f"Municipios: {len(filt_mun)}")
-    if filt_parr:
-        alcance.append(f"Parroquias: {len(filt_parr)}")
-    if min_eff > 1:
-        alcance.append(f"Mín. casos: {min_eff}")
-
-    st.caption(
-        f"**{fmt_num(len(pend))}** ubicaciones pendientes · "
-        f"**{fmt_num(rp['n_casos'])}** casos 1×10 en total · "
-        f"**{fmt_num(rp['n_multi'])}** ubicaciones con 2 o más reportes · "
-        f"máximo **{fmt_num(rp['max_casos'])}** casos en un mismo punto"
-        f"{extra_gps}"
-    )
-    st.caption(
-        "Filtro activo · "
-        + " · ".join(alcance)
-        + f" · id `{filt_sig}`"
-    )
-
-    # CSV ligero siempre alineado al filtro; Excel solo al preparar
-    # (evita payload stale + bloqueo al regenerar xlsx en cada clic).
-    csv_bytes = pend.to_csv(index=False).encode("utf-8-sig")
-    d1, d2, d3 = st.columns([1, 1, 1.4])
+    d1, d2, d3 = st.columns([1, 1, 2.2])
     with d1:
         st.download_button(
             "CSV filtrado",
-            data=csv_bytes,
-            file_name=f"pendientes_1x10_filtrado_{filt_sig}.csv",
+            data=pend.to_csv(index=False).encode("utf-8-sig"),
+            file_name="pendientes_1x10_por_ubicacion_filtrado.csv",
             mime="text/csv",
             use_container_width=True,
-            key=f"dl_{sec}_csv_{filt_sig}",
+            key=f"dl_{sec}_csv",
         )
     with d2:
-        prep = st.button(
-            "Preparar Excel filtrado",
-            use_container_width=True,
-            type="primary" if not export_ok else "secondary",
-            key=f"prep_{sec}_xlsx_{filt_sig}",
-            help=(
-                "Genera el Excel con el filtro actual. "
-                "Obligatorio tras cambiar Estado/Municipio/… "
-                "antes de descargar."
+        xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
+        st.download_button(
+            "Excel filtrado",
+            data=xlsx,
+            file_name="reportes_1x10_pendientes_filtrado.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet"
             ),
+            type="primary",
+            use_container_width=True,
+            key=f"dl_{sec}_xlsx",
         )
-        if prep:
-            with st.spinner("Generando Excel con el filtro actual…"):
-                todos = frame_ubicaciones_inspeccion(
-                    sol,
-                    solo_pendientes=False,
-                    solo_mapa_ok=not incluir_gps_dudoso,
-                    estados=filt_est or None,
-                    municipios=filt_mun or None,
-                    parroquias=filt_parr or None,
-                    min_casos=min_eff,
-                )
-                st.session_state[export_ss] = {
-                    "sig": filt_sig,
-                    "n": int(len(pend)),
-                    "xlsx": excel_bytes_reportes_inspeccion(
-                        pend, todos, summary=summary
-                    ),
-                    "alcance": " · ".join(alcance),
-                }
-            st.rerun()
     with d3:
-        if export_ok and isinstance(export, dict) and "xlsx" in export:
-            st.download_button(
-                f"Excel filtrado ({fmt_num(export.get('n', len(pend)))} ub.)",
-                data=export["xlsx"],
-                file_name=(
-                    f"reportes_1x10_pendientes_filtrado_{filt_sig}.xlsx"
-                ),
-                mime=(
-                    "application/vnd.openxmlformats-officedocument"
-                    ".spreadsheetml.sheet"
-                ),
-                use_container_width=True,
-                key=f"dl_{sec}_xlsx_{filt_sig}",
-            )
-        else:
-            prev_n = (
-                export.get("n")
-                if isinstance(export, dict)
-                else None
-            )
-            if isinstance(export, dict) and export.get("sig") != filt_sig:
-                st.warning(
-                    "El Excel listo es de **otro filtro**"
-                    + (
-                        f" ({fmt_num(prev_n)} ub.)"
-                        if prev_n is not None
-                        else ""
-                    )
-                    + ". Pulsa **Preparar Excel filtrado**."
-                )
-            else:
-                st.info("Pulsa **Preparar Excel filtrado** para bajarlo.")
+        extra_gps = (
+            f" · ocultos por GPS dudoso/mar: **{fmt_num(n_excl_gps)}**"
+            if (not incluir_gps_dudoso and n_excl_gps)
+            else ""
+        )
+        st.caption(
+            f"**{fmt_num(len(pend))}** ubicaciones pendientes · "
+            f"**{fmt_num(rp['n_casos'])}** casos 1×10 en total · "
+            f"**{fmt_num(rp['n_multi'])}** ubicaciones con 2 o más reportes · "
+            f"máximo **{fmt_num(rp['max_casos'])}** casos en un mismo punto"
+            f"{extra_gps}"
+        )
 
     if sec == "mapa":
         render_pendientes_map_ui(pend)

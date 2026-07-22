@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 DATA = ROOT / "data" / "processed"
 
 from auth_gate import (  # noqa: E402
+    can_see_contact,
     can_upload,
     current_role,
     current_username,
@@ -35,6 +36,7 @@ from pages_analysis import (  # noqa: E402
     page_reportes_inspecciones,
 )
 from pages_caracteristicas import page_info_1x10, page_info_habitable  # noqa: E402
+from pii_policy import apply_sol_pii_policy  # noqa: E402
 from ui_theme import (  # noqa: E402
     inject_executive_css,
     render_hero,
@@ -210,12 +212,22 @@ def main():
 
     sol, hab, summary = load_data()
 
+    # P1 seguridad: minimizar PII de contacto según rol (ejecutivo sin cédula/teléfono)
+    allow_contact = can_see_contact()
+    sol = apply_sol_pii_policy(sol, allow_contact=allow_contact)
+
     with st.sidebar:
         role = current_role() or ""
         st.caption(
             f"Sesión: **{current_username() or '—'}** · "
             f"{ROLE_LABELS.get(role, role)}"
         )
+        if allow_contact:
+            st.caption("Permiso de contacto: sí (operador/admin).")
+        else:
+            st.caption(
+                "Vista **sin datos de contacto** (cédula, denunciante, teléfonos)."
+            )
         if st.button("Cerrar sesión", use_container_width=True, key="bi_logout"):
             logout()
             st.rerun()
