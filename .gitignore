@@ -33,3 +33,5 @@ data/external_nasa/nasa_s1_all_full/
 data/external_nasa/nasa_s1_all_structures/
 data/external_nasa/**/*.geojson
 data/external_nasa/**/*.geojsonl
+
+data/auth/
