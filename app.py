@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 DATA = ROOT / "data" / "processed"
 
 from data_ingest import render_upload_panel  # noqa: E402
+from auth_gate import logout, require_login  # noqa: E402
 from map_robust import render_map_ui  # noqa: E402
 from pages_abordaje import page_abordaje  # noqa: E402
 from pages_nasa import page_nasa  # noqa: E402
@@ -30,7 +31,6 @@ from ui_theme import (  # noqa: E402
     inject_executive_css,
     render_hero,
 )
-
 
 @st.cache_data(show_spinner="Cargando datos procesados…")
 def load_data():
@@ -61,6 +61,7 @@ def fmt_num(n: float | int) -> str:
 
 def _label_corte(summary: dict) -> dict:
     """Etiquetas legibles del corte de datos (sidebar)."""
+    import html as html_lib
     from pathlib import Path
 
     gen = summary.get("corte_generado_en") or "—"
@@ -73,9 +74,9 @@ def _label_corte(summary: dict) -> dict:
     n1 = summary.get("corte_1x10_n", summary.get("n_1x10", 0))
     n2 = summary.get("corte_habitable_n", summary.get("n_hab", 0))
     return {
-        "generado": gen,
-        "archivo_1x10": a1 or "(sin dato)",
-        "archivo_hab": a2 or "(sin dato)",
+        "generado": html_lib.escape(str(gen)),
+        "archivo_1x10": html_lib.escape(str(a1 or "(sin dato)")),
+        "archivo_hab": html_lib.escape(str(a2 or "(sin dato)")),
         "n_1x10": fmt_num(n1 or 0),
         "n_hab": fmt_num(n2 or 0),
     }
@@ -163,6 +164,9 @@ def main():
     )
     inject_executive_css()
 
+    # P0 seguridad: no cargar datos ni panel de subida sin acceso válido
+    require_login()
+
     from nav_schema import HOME_ID, find_section, resolve_nav
     from ui_theme import (
         render_back_to_index,
@@ -197,6 +201,10 @@ def main():
     sol, hab, summary = load_data()
 
     with st.sidebar:
+        if st.button("Cerrar sesión", use_container_width=True, key="bi_logout"):
+            logout()
+            st.rerun()
+        st.divider()
         active = render_sidebar_nav(st.session_state["nav_item"])
         st.session_state["nav_item"] = active
         st.divider()

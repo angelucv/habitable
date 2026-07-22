@@ -8,9 +8,14 @@ services:
     plan: free
     healthCheckPath: /
     envVars:
-      # Contraseña de acceso al BI (Streamlit secrets también sirve)
+      # Contraseña de acceso al BI (OBLIGATORIA — definir valor en Render Dashboard)
       - key: BI_PASSWORD
         sync: false
+      # Sin contraseña configurada, el tablero se bloquea
+      - key: BI_REQUIRE_AUTH
+        value: "1"
+      - key: BI_ENV
+        value: "production"
       - key: PYTHONUNBUFFERED
         value: "1"
       # Más RAM en Render: precarga completa + reemplazo por Excel

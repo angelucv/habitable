@@ -23,6 +23,9 @@ ENV MALLOC_ARENA_MAX=2
 # Plan con más RAM: mapa más completo; pipeline de reemplazo habilitado
 ENV BI_LOW_MEMORY=0
 ENV BI_MAP_MAX_MARKERS=5000
+# Sin BI_PASSWORD el tablero se bloquea en este modo
+ENV BI_REQUIRE_AUTH=1
+ENV BI_ENV=production
 EXPOSE 10000
 
 # Arranque: puerto dinámico de Render + headless
