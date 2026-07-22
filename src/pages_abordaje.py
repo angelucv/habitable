@@ -686,12 +686,173 @@ def page_abordaje(
     summary: dict | None = None,
     sub: str = "abordaje_capas",
 ) -> None:
+    """Capas GIS de abordaje + puntos del cruce, o descarga del cruce territorial."""
+    if sub == "abordaje_descarga":
+        _render_abordaje_descarga(sol, summary)
+        return
+    _render_abordaje_mapa(sol, hab, summary)
+
+
+def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
+    """Pestaña: generar Excel/CSV 1×10 × capas GIS + estado Habitable."""
+    import io
+
+    import pandas as pd
+    import streamlit as st
+
+    from abordaje_export import EXPORT_LAYER_SPECS, construir_cruce_1x10_capas
+    from ui_theme import render_section
+
+    render_section(
+        "Descargar cruce territorial",
+        "Listado de casos 1×10 con cruce a las capas de Mapas de abordaje "
+        "(máscaras, cuadrículas, microzonas, parroquias INE, segmentos censales) "
+        "y el estado de inspección Habitable cuando hay match.",
+    )
+    if summary:
+        st.caption(
+            f"Corte cruce BI · {summary.get('corte_generado_en', '—')} · "
+            f"radio {summary.get('radius_m', 50)} m"
+        )
+
+    available = []
+    missing = []
+    for spec in EXPORT_LAYER_SPECS:
+        if _layer_path(spec["id"]) is not None:
+            available.append(spec)
+        else:
+            missing.append(spec["label"])
+    if missing:
+        st.warning("Capas no encontradas en disco: " + ", ".join(missing))
+    if not available:
+        st.error("No hay capas GIS disponibles para el cruce.")
+        return
+
+    default_ids = [
+        s["id"] for s in available if not s.get("heavy")
+    ]
+    # Incluir parroquias INE por defecto si existe
+    for prefer in ("parroquias_ine_2025", "parroquias"):
+        if any(s["id"] == prefer for s in available) and prefer not in default_ids:
+            default_ids.append(prefer)
+
+    labels = {
+        s["id"]: f"{s['label']}" + (" · pesada" if s.get("heavy") else "")
+        for s in available
+    }
+    sel = st.multiselect(
+        "Capas a cruzar",
+        options=[s["id"] for s in available],
+        default=default_ids,
+        format_func=lambda i: labels.get(i, i),
+        key="abordaje_export_layers",
+        help="Los segmentos censales (~28 mil polígonos) pueden tardar más.",
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        solo_rep = st.checkbox(
+            "Solo ubicaciones representantes (dedupe)",
+            value=True,
+            key="abordaje_export_rep",
+        )
+    with c2:
+        solo_map = st.checkbox(
+            "Solo puntos mapeables / GPS ok",
+            value=True,
+            key="abordaje_export_mapok",
+        )
+
+    if not sel:
+        st.info("Seleccione al menos una capa.")
+        return
+
+    if st.button(
+        "Generar cruce y preparar descarga",
+        type="primary",
+        key="abordaje_export_run",
+    ):
+        with st.spinner("Cruzando puntos 1×10 con las capas seleccionadas…"):
+            try:
+                df, meta = construir_cruce_1x10_capas(
+                    sol if isinstance(sol, pd.DataFrame) else pd.DataFrame(),
+                    layer_ids=list(sel),
+                    solo_mapeables=solo_map,
+                    solo_representantes=solo_rep,
+                )
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"No se pudo generar el cruce: {exc}")
+                return
+        st.session_state["abordaje_export_df"] = df
+        st.session_state["abordaje_export_meta"] = meta
+
+    df = st.session_state.get("abordaje_export_df")
+    meta = st.session_state.get("abordaje_export_meta") or {}
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        st.caption("Pulse el botón para materializar el archivo de descarga.")
+        return
+
+    st.success(
+        f"Listo · {len(df):,} filas".replace(",", ".")
+        + (
+            f" · capas faltantes: {', '.join(meta.get('capas_faltantes') or [])}"
+            if meta.get("capas_faltantes")
+            else ""
+        )
+    )
+    if meta.get("capas"):
+        rows = [
+            {
+                "Capa": v.get("label"),
+                "Con match": v.get("n_con_match"),
+                "%": v.get("pct"),
+            }
+            for v in meta["capas"].values()
+        ]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+    st.dataframe(df.head(200), hide_index=True, width="stretch", height=360)
+    st.caption("Vista previa (200 filas). El archivo completo va en la descarga.")
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="cruce_1x10_capas", index=False)
+        pd.DataFrame(
+            [
+                {"clave": k, "valor": str(v)}
+                for k, v in {
+                    "n_puntos": meta.get("n_puntos"),
+                    "capas": list((meta.get("capas") or {}).keys()),
+                    "faltantes": meta.get("capas_faltantes"),
+                }.items()
+            ]
+        ).to_excel(writer, sheet_name="meta", index=False)
+    st.download_button(
+        "Descargar Excel del cruce territorial",
+        data=buf.getvalue(),
+        file_name="cruce_1x10_capas_abordaje.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        key="abordaje_export_dl_xlsx",
+    )
+    st.download_button(
+        "Descargar CSV",
+        data=df.to_csv(index=False).encode("utf-8-sig"),
+        file_name="cruce_1x10_capas_abordaje.csv",
+        mime="text/csv",
+        key="abordaje_export_dl_csv",
+    )
+
+
+def _render_abordaje_mapa(
+    sol=None,
+    hab=None,
+    summary: dict | None = None,
+) -> None:
     """Capas GIS de abordaje + puntos del cruce (pendientes y semáforo)."""
     import pandas as pd
 
     from map_robust import _df_to_bytes
 
-    _ = sub
     st.caption(
         "Capas de planificación (MAPAS ABORDAJE) con los puntos del BI: "
         "pendientes 1×10 y Habitable por semáforo."

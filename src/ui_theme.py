@@ -1068,9 +1068,11 @@ def render_sidebar_nav(active_item: str) -> str:
     st.caption("Elige una sección; las subpestañas aparecen en la pantalla.")
 
     home_on = active_item == HOME_ID
+    # Clave dinámica: evita que un clic de filtro/widget se atribuya al botón Inicio
+    # cuando cambia el árbol de widgets (bug conocido de Streamlit).
     if st.button(
         "Inicio · índice",
-        key="nav_home",
+        key=f"nav_home__{active_item or 'x'}",
         use_container_width=True,
         type="primary" if home_on else "secondary",
     ):
@@ -1082,7 +1084,7 @@ def render_sidebar_nav(active_item: str) -> str:
         on = sec_id == sec.id and active_item != HOME_ID
         if st.button(
             sec.label,
-            key=f"nav_sec_{sec.id}",
+            key=f"nav_sec_{sec.id}__{active_item or 'x'}",
             use_container_width=True,
             type="primary" if on else "secondary",
             help=sec.blurb,
@@ -1347,8 +1349,11 @@ def render_back_to_index() -> None:
     """Vínculo ejecutivo para volver al índice general."""
     from nav_schema import HOME_ID
 
+    cur = st.session_state.get("nav_item", HOME_ID)
     st.markdown('<div class="nav-back">', unsafe_allow_html=True)
-    if st.button("← Índice general", key="nav_back_home"):
+    # Clave dinámica por pantalla activa: evita “falsos clics” al índice
+    # cuando cambian filtros/capas y se reordena el árbol de widgets.
+    if st.button("← Índice general", key=f"nav_back_home__{cur}"):
         st.session_state["nav_item"] = HOME_ID
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1362,10 +1367,17 @@ def render_page_crumb(section_label: str, item_label: str) -> None:
 
 
 def render_section_subtabs(section) -> str:
-    """Pestañas internas de una sección (en el área principal)."""
+    """Pestañas internas de una sección (estado separado de la navegación global)."""
     options = [(it.id, it.label) for it in section.items]
-    return render_section_tabs(
+    tab_key = f"nav_tab_{section.id}"
+    valid = {k for k, _ in options}
+    # Si llegamos desde el índice/sidebar a un ítem de esta sección, alinear pestaña
+    current_nav = st.session_state.get("nav_item")
+    if current_nav in valid:
+        st.session_state[tab_key] = current_nav
+    chosen = render_section_tabs(
         options,
-        state_key="nav_item",
+        state_key=tab_key,
         heading=f"Pestañas · {section.label}",
     )
+    return chosen

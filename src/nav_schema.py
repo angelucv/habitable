@@ -141,6 +141,12 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
                 "Capas y puntos del cruce",
                 "Máscaras, cuadrículas de abordaje, pendientes 1×10 y etiqueta de campo.",
             ),
+            NavItem(
+                "abordaje_descarga",
+                "Descargar cruce territorial",
+                "Listado 1×10 cruzado con capas GIS (microzonas, cuadrículas, máscaras, "
+                "parroquias INE, segmentos) y estado Habitable.",
+            ),
         ),
     ),
     NavSection(

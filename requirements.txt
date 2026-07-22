@@ -10,4 +10,4 @@ streamlit-echarts>=0.4.0
 folium>=0.15
 streamlit-folium>=0.20
 pygwalker>=0.4.9
-tornado>=6.4
+shapely>=2.0
