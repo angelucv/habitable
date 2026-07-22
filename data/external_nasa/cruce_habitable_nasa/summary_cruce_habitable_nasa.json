@@ -1,0 +1,108 @@
+{
+  "n_habitable": 13121,
+  "n_nasa": 2700098,
+  "within_polygon": 4328,
+  "within_pct": 32.99,
+  "by_label_all_nearest": {
+    "not_damaged": 10562,
+    "likely_damaged": 1965,
+    "not_assessed": 594
+  },
+  "by_prioridad": {
+    "media": 10323,
+    "alta": 1954,
+    "revisar": 513,
+    "sin_radar": 331
+  },
+  "dist_m": {
+    "median": 2.13,
+    "p90": 13.91,
+    "mean": 2238.9
+  },
+  "radios": {
+    "30": {
+      "n": 12527,
+      "pct": 95.47,
+      "by_label": {
+        "not_damaged": 10200,
+        "likely_damaged": 1933,
+        "not_assessed": 394
+      },
+      "likely_damaged": 1933,
+      "not_damaged": 10200,
+      "not_assessed": 394
+    },
+    "50": {
+      "n": 12681,
+      "pct": 96.65,
+      "by_label": {
+        "not_damaged": 10323,
+        "likely_damaged": 1954,
+        "not_assessed": 404
+      },
+      "likely_damaged": 1954,
+      "not_damaged": 10323,
+      "not_assessed": 404
+    },
+    "100": {
+      "n": 12790,
+      "pct": 97.48,
+      "by_label": {
+        "not_damaged": 10413,
+        "likely_damaged": 1963,
+        "not_assessed": 414
+      },
+      "likely_damaged": 1963,
+      "not_damaged": 10413,
+      "not_assessed": 414
+    },
+    "200": {
+      "n": 12855,
+      "pct": 97.97,
+      "by_label": {
+        "not_damaged": 10475,
+        "likely_damaged": 1963,
+        "not_assessed": 417
+      },
+      "likely_damaged": 1963,
+      "not_damaged": 10475,
+      "not_assessed": 417
+    }
+  },
+  "by_etiqueta_le50": {
+    "AMARILLO": {
+      "n": 2973,
+      "likely_damaged": 421,
+      "pct_likely": 14.16,
+      "not_damaged": 2506,
+      "not_assessed": 46
+    },
+    "NEGRO": {
+      "n": 620,
+      "likely_damaged": 167,
+      "pct_likely": 26.94,
+      "not_damaged": 299,
+      "not_assessed": 154
+    },
+    "ROJO": {
+      "n": 1722,
+      "likely_damaged": 413,
+      "pct_likely": 23.98,
+      "not_damaged": 1222,
+      "not_assessed": 87
+    },
+    "VERDE": {
+      "n": 7366,
+      "likely_damaged": 953,
+      "pct_likely": 12.94,
+      "not_damaged": 6296,
+      "not_assessed": 117
+    }
+  },
+  "criticos_rojo_negro": {
+    "n": 2432,
+    "likely_damaged_le50": 580,
+    "not_damaged_le50": 1521,
+    "sin_radar_gt100": 58
+  }
+}

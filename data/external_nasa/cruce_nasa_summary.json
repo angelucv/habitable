@@ -1,0 +1,14 @@
+{
+  "nasa_n": 58870,
+  "hab_n": 18553,
+  "x10_n": 25998,
+  "ia_n": 10367,
+  "radius_m": 50,
+  "nasa_near_hab_pct": 29.1,
+  "nasa_near_1x10_pct": 26.2,
+  "nasa_near_ia_pct": 30.0,
+  "nasa_none_pct": 46.3,
+  "nasa_bbox_n": 27306,
+  "nasa_bbox_none_pct": 12.9,
+  "ia_near_nasa_pct_50": 82.4
+}

@@ -1,0 +1,78 @@
+{
+  "n_1x10": 25998,
+  "n_nasa": 2700098,
+  "within_polygon": 7471,
+  "within_pct": 28.74,
+  "by_label_all_nearest": {
+    "not_damaged": 22018,
+    "likely_damaged": 1991,
+    "not_assessed": 1989
+  },
+  "by_prioridad": {
+    "media": 20719,
+    "sin_radar": 2112,
+    "alta": 1968,
+    "revisar": 1199
+  },
+  "dist_m": {
+    "median": 2.9,
+    "p90": 46.0,
+    "mean": 4938.99
+  },
+  "radios": {
+    "30": {
+      "n": 22963,
+      "pct": 88.33,
+      "by_label": {
+        "not_damaged": 20253,
+        "likely_damaged": 1951,
+        "not_assessed": 759
+      },
+      "likely_damaged": 1951,
+      "not_damaged": 20253,
+      "not_assessed": 759
+    },
+    "50": {
+      "n": 23470,
+      "pct": 90.28,
+      "by_label": {
+        "not_damaged": 20719,
+        "likely_damaged": 1968,
+        "not_assessed": 783
+      },
+      "likely_damaged": 1968,
+      "not_damaged": 20719,
+      "not_assessed": 783
+    },
+    "100": {
+      "n": 23886,
+      "pct": 91.88,
+      "by_label": {
+        "not_damaged": 21106,
+        "likely_damaged": 1981,
+        "not_assessed": 799
+      },
+      "likely_damaged": 1981,
+      "not_damaged": 21106,
+      "not_assessed": 799
+    },
+    "200": {
+      "n": 24148,
+      "pct": 92.88,
+      "by_label": {
+        "not_damaged": 21347,
+        "likely_damaged": 1987,
+        "not_assessed": 814
+      },
+      "likely_damaged": 1987,
+      "not_damaged": 21347,
+      "not_assessed": 814
+    }
+  },
+  "pendientes_solo_1x10": {
+    "n": 19973,
+    "likely_damaged_le50": 1043,
+    "not_damaged_le50": 15690,
+    "sin_radar_gt100": 2101
+  }
+}

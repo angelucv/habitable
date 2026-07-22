@@ -107,6 +107,33 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             ),
         ),
     ),
+    NavSection(
+        id="nasa",
+        label="Mapa NASA",
+        blurb="Sentinel-1 cruzado con 1×10, Habitable e IA: mapa y análisis por fuente.",
+        items=(
+            NavItem(
+                "nasa_mapa",
+                "Capas NASA y cruces",
+                "Daño probable, coincidencias e inventario muestreado.",
+            ),
+            NavItem(
+                "nasa_1x10",
+                "Análisis 1×10 × NASA",
+                "Cola prioritaria y calor para orientar siguientes casos.",
+            ),
+            NavItem(
+                "nasa_hab",
+                "Análisis Habitable × NASA",
+                "Confiabilidad del radar vs semáforo de campo; zonas de calor.",
+            ),
+            NavItem(
+                "nasa_ia",
+                "Análisis IA × NASA",
+                "Acuerdo óptico↔radar, doble alerta y mapas de calor.",
+            ),
+        ),
+    ),
 )
 
 HOME_ID = "inicio"

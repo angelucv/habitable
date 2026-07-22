@@ -1,0 +1,25 @@
+{
+  "cell_m": 500,
+  "coinc_max_m": 100.0,
+  "n_nasa_source": 2700098,
+  "n_total_lite": 135855,
+  "n_likely_damaged": 58870,
+  "n_coincide_fuentes": 27939,
+  "n_inventario_500m": 49046,
+  "coinc_fids_union": 35172,
+  "coinc_fids_en_lite": 35172,
+  "coinc_fids_missing": 0,
+  "by_label": {
+    "not_damaged": 63213,
+    "likely_damaged": 58870,
+    "not_assessed": 13772
+  },
+  "by_kind": {
+    "likely_damaged": 58870,
+    "inventario_500m": 49046,
+    "coincide_fuentes": 27939
+  },
+  "cruces_usaron_nasa_completo": true,
+  "elapsed_s": 12.2,
+  "mb": 3.99
+}

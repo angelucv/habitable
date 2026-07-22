@@ -1,0 +1,114 @@
+{
+  "n_ia": 10367,
+  "n_nasa": 2700098,
+  "within_polygon": 5145,
+  "within_pct": 49.63,
+  "by_label_all_nearest": {
+    "likely_damaged": 6855,
+    "not_damaged": 3512
+  },
+  "by_prioridad": {
+    "alta": 6826,
+    "media": 3473,
+    "revisar": 35,
+    "sin_radar": 33
+  },
+  "by_estatus_ia": {
+    "No afectado": 5876,
+    "Posiblemente afectado": 3080,
+    "Afectado": 1410,
+    "revision humana": 1
+  },
+  "dist_m": {
+    "median": 0.03,
+    "p90": 7.05,
+    "mean": 2.94
+  },
+  "radios": {
+    "30": {
+      "n": 10262,
+      "pct": 98.99,
+      "by_label": {
+        "likely_damaged": 6807,
+        "not_damaged": 3455
+      },
+      "likely_damaged": 6807,
+      "not_damaged": 3455,
+      "not_assessed": 0
+    },
+    "50": {
+      "n": 10299,
+      "pct": 99.34,
+      "by_label": {
+        "likely_damaged": 6826,
+        "not_damaged": 3473
+      },
+      "likely_damaged": 6826,
+      "not_damaged": 3473,
+      "not_assessed": 0
+    },
+    "100": {
+      "n": 10334,
+      "pct": 99.68,
+      "by_label": {
+        "likely_damaged": 6847,
+        "not_damaged": 3487
+      },
+      "likely_damaged": 6847,
+      "not_damaged": 3487,
+      "not_assessed": 0
+    },
+    "200": {
+      "n": 10362,
+      "pct": 99.95,
+      "by_label": {
+        "likely_damaged": 6855,
+        "not_damaged": 3507
+      },
+      "likely_damaged": 6855,
+      "not_damaged": 3507,
+      "not_assessed": 0
+    }
+  },
+  "by_estatus_le50": {
+    "Afectado": {
+      "n": 1399,
+      "likely_damaged": 1105,
+      "pct_likely": 78.98,
+      "not_damaged": 294,
+      "not_assessed": 0
+    },
+    "No afectado": {
+      "n": 5845,
+      "likely_damaged": 3574,
+      "pct_likely": 61.15,
+      "not_damaged": 2271,
+      "not_assessed": 0
+    },
+    "Posiblemente afectado": {
+      "n": 3054,
+      "likely_damaged": 2147,
+      "pct_likely": 70.3,
+      "not_damaged": 907,
+      "not_assessed": 0
+    },
+    "revision humana": {
+      "n": 1,
+      "likely_damaged": 0,
+      "pct_likely": 0.0,
+      "not_damaged": 1,
+      "not_assessed": 0
+    }
+  },
+  "alertas_ia": {
+    "n": 4491,
+    "estatus": {
+      "Posiblemente afectado": 3080,
+      "Afectado": 1410,
+      "revision humana": 1
+    },
+    "likely_damaged_le50": 3252,
+    "not_damaged_le50": 1202,
+    "sin_radar_gt100": 15
+  }
+}

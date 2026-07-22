@@ -19,6 +19,7 @@ DATA = ROOT / "data" / "processed"
 from data_ingest import render_upload_panel  # noqa: E402
 from map_robust import render_map_ui  # noqa: E402
 from pages_abordaje import page_abordaje  # noqa: E402
+from pages_nasa import page_nasa  # noqa: E402
 from pages_analysis import (  # noqa: E402
     page_1x10,
     page_habitable,
@@ -298,6 +299,8 @@ def main():
         page_mapa(sol, hab, summary, sub=item_id)
     elif sec_id == "abordaje":
         page_abordaje(sol, hab, summary, sub=item_id)
+    elif sec_id == "nasa":
+        page_nasa(sol, hab, summary, sub=item_id)
     elif sec_id == "x10":
         page_1x10(sol, summary, sub=item_id)
     elif sec_id == "pend":
