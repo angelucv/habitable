@@ -330,6 +330,57 @@ def _match_label(cat: str) -> str:
     }.get(str(cat or ""), str(cat or "—"))
 
 
+def _circle_batch_callback() -> str:
+    """
+    Callback JS para FastMarkerCluster: dibuja CircleMarker individuales
+    (sin agrupar en zoom operativo). Filas: [lat, lng, popup, radius, color, tooltip].
+    """
+    return """
+function (row) {
+    var marker = L.circleMarker(new L.LatLng(row[0], row[1]), {
+        radius: row[3] || 1.5,
+        color: row[4] || '#334155',
+        fillColor: row[4] || '#334155',
+        fillOpacity: 0.7,
+        weight: 1
+    });
+    if (row[2]) { marker.bindPopup(row[2]); }
+    if (row[5]) { marker.bindTooltip(row[5], {sticky: true}); }
+    return marker;
+};
+"""
+
+
+# Sin clustering visual en zooms útiles (≤22); el plugin solo acelera el armado JS.
+_BATCH_MARKER_OPTIONS = {
+    "disableClusteringAtZoom": 22,
+    "maxClusterRadius": 1,
+    "spiderfyOnMaxZoom": False,
+    "showCoverageOnHover": False,
+}
+
+
+def _add_circle_batch(
+    fmap: folium.Map,
+    rows: list[list[Any]],
+    *,
+    name: str,
+    show: bool = True,
+) -> None:
+    """Añade miles de círculos en un solo lote JS (evita CircleMarker Python 1 a 1)."""
+    if not rows:
+        return
+    from folium.plugins import FastMarkerCluster
+
+    FastMarkerCluster(
+        data=rows,
+        callback=_circle_batch_callback(),
+        name=name,
+        show=show,
+        options=dict(_BATCH_MARKER_OPTIONS),
+    ).add_to(fmap)
+
+
 def _enrich_hab_con_1x10(hab, sol):
     """Añade columnas x10_* a Habitable según cruce (hab_id)."""
     import pandas as pd
@@ -436,6 +487,7 @@ def _build_map(
         control_scale=True,
         prefer_canvas=True,
     )
+    # Solo el basemap activo (+ resto ocultos solo si hacen falta en control)
     m.add_child(_tile_layer(basemap, show=True))
     for key in BASEMAPS:
         if key == basemap:
@@ -457,7 +509,7 @@ def _build_map(
         kind = meta.get("kind", "polygon")
 
         if kind == "points":
-            fg = folium.FeatureGroup(name=name, show=True)
+            rows_pts: list[list[Any]] = []
             for feat in data["features"]:
                 geom = feat.get("geometry") or {}
                 if geom.get("type") != "Point":
@@ -474,18 +526,10 @@ def _build_map(
                         **{k: props.get(k) for k in tip_keys},
                     },
                 )
-                folium.CircleMarker(
-                    location=[coords[1], coords[0]],
-                    radius=1.5,
-                    color=color,
-                    fill=True,
-                    fill_color=color,
-                    fill_opacity=0.7,
-                    weight=1,
-                    tooltip=folium.Tooltip(tip) if tip else None,
-                    popup=folium.Popup(popup, max_width=360),
-                ).add_to(fg)
-            fg.add_to(m)
+                rows_pts.append(
+                    [float(coords[1]), float(coords[0]), popup, 1.5, color, tip]
+                )
+            _add_circle_batch(m, rows_pts, name=name, show=True)
         else:
             sample_props = (
                 (data["features"][0].get("properties") or {}) if data["features"] else {}
@@ -525,15 +569,12 @@ def _build_map(
     coin = _read(coin_bytes)
     hab = _read(hab_bytes)
 
-    # Pendientes 1×10 — mismo tamaño compacto + popup enriquecido
+    # Puntos en lote JS (mismos círculos/popups; sin crear ~40k objetos Python Folium)
     if show_solo and not solo.empty:
         if "cantidad_casos" not in solo.columns and "n_reportes" in solo.columns:
             solo = solo.copy()
             solo["cantidad_casos"] = solo["n_reportes"]
-        fg = folium.FeatureGroup(
-            name=f"1×10 pendientes · {len(solo):,}".replace(",", "."),
-            show=True,
-        )
+        rows: list[list[Any]] = []
         for r in solo.dropna(subset=["lat", "lng"]).itertuples(index=False):
             n = _volumen_casos(r)
             color = _color_por_volumen(n)
@@ -555,24 +596,18 @@ def _build_map(
                 },
             )
             tip = f"{n} caso(s) · 1×10 · {str(dir_show)[:50]}"
-            folium.CircleMarker(
-                location=[float(r.lat), float(r.lng)],
-                radius=radius,
-                color=color,
-                fill=True,
-                fill_color=color,
-                fill_opacity=0.75 if n >= 5 else 0.65,
-                weight=1,
-                popup=folium.Popup(popup, max_width=380),
-                tooltip=tip,
-            ).add_to(fg)
-        fg.add_to(m)
-
-    if show_coin and not coin.empty:
-        fg = folium.FeatureGroup(
-            name=f"1×10 atendidas · {len(coin):,}".replace(",", "."),
+            rows.append(
+                [float(r.lat), float(r.lng), popup, float(radius), color, tip]
+            )
+        _add_circle_batch(
+            m,
+            rows,
+            name=f"1×10 pendientes · {len(rows):,}".replace(",", "."),
             show=True,
         )
+
+    if show_coin and not coin.empty:
+        rows = []
         for r in coin.dropna(subset=["lat", "lng"]).itertuples(index=False):
             n = _volumen_casos(r)
             radius = _radius_por_volumen(n)
@@ -594,24 +629,18 @@ def _build_map(
                 },
             )
             tip = f"Atendida · {n} caso(s) · {_codigos_punto(r)[:40]}"
-            folium.CircleMarker(
-                location=[float(r.lat), float(r.lng)],
-                radius=radius,
-                color="#7C3AED",
-                fill=True,
-                fill_color="#7C3AED",
-                fill_opacity=0.7,
-                weight=1,
-                popup=folium.Popup(popup, max_width=380),
-                tooltip=tip,
-            ).add_to(fg)
-        fg.add_to(m)
-
-    if show_hab and not hab.empty:
-        fg = folium.FeatureGroup(
-            name=f"Habitable semáforo · {len(hab):,}".replace(",", "."),
+            rows.append(
+                [float(r.lat), float(r.lng), popup, float(radius), "#7C3AED", tip]
+            )
+        _add_circle_batch(
+            m,
+            rows,
+            name=f"1×10 atendidas · {len(rows):,}".replace(",", "."),
             show=True,
         )
+
+    if show_hab and not hab.empty:
+        rows = []
         for r in hab.dropna(subset=["lat", "lng"]).itertuples(index=False):
             et = str(getattr(r, "etiqueta_n", "SIN") or "SIN").upper()
             color = ETIQUETA_HEX.get(et, "#888888")
@@ -634,18 +663,13 @@ def _build_map(
                 },
             )
             tip = f"Habitable {et} · 1×10: {en_x10}"
-            folium.CircleMarker(
-                location=[float(r.lat), float(r.lng)],
-                radius=1.5,
-                color=color,
-                fill=True,
-                fill_color=color,
-                fill_opacity=0.7,
-                weight=1,
-                popup=folium.Popup(popup, max_width=380),
-                tooltip=tip,
-            ).add_to(fg)
-        fg.add_to(m)
+            rows.append([float(r.lat), float(r.lng), popup, 1.5, color, tip])
+        _add_circle_batch(
+            m,
+            rows,
+            name=f"Habitable semáforo · {len(rows):,}".replace(",", "."),
+            show=True,
+        )
 
     folium.LayerControl(collapsed=True, position="topright").add_to(m)
     return m.get_root().render()
@@ -897,61 +921,22 @@ def _render_abordaje_mapa(
         else pd.DataFrame()
     )
 
-    # Controles principales
-    c1, c2, c3 = st.columns([1.2, 1.2, 2])
+    # Controles rápidos (no fuerzan rebuild de ~40k puntos hasta «Aplicar»)
+    c1, c2 = st.columns([1.2, 1.2])
     with c1:
-        basemap = st.selectbox(
+        basemap_ui = st.selectbox(
             "Mapa base",
             options=list(BASEMAPS.keys()),
             index=0,
             key="abordaje_basemap",
         )
     with c2:
-        view_name = st.selectbox(
+        view_ui = st.selectbox(
             "Vista inicial",
             options=list(VIEWS.keys()),
             index=0,
             key="abordaje_view",
         )
-    with c3:
-        st.markdown("##### Puntos del cruce BI")
-        show_solo = st.checkbox(
-            f"1×10 pendientes ({len(solo):,})".replace(",", "."),
-            value=True,
-            key="abordaje_show_solo",
-            help="Ubicaciones 1×10 sin cruce Habitable (representantes, GPS ok).",
-        )
-        show_hab = st.checkbox(
-            f"Habitable semáforo ({len(hab_geo):,})".replace(",", "."),
-            value=True,
-            key="abordaje_show_hab",
-            help="Inspecciones con color VERDE / AMARILLO / ROJO / NEGRO.",
-        )
-        show_coin = st.checkbox(
-            f"1×10 atendidas ({len(coin):,})".replace(",", "."),
-            value=False,
-            key="abordaje_show_coin",
-            help="Coincidencia alta/media con Habitable.",
-        )
-
-    zone_mode = st.radio(
-        "Estilo de zonas GIS (máscaras / microzonas / cuadrículas)",
-        options=["contorno", "suave", "relleno"],
-        index=0,
-        horizontal=True,
-        key="abordaje_zone_mode",
-        help=(
-            "Contorno = solo borde (recomendado). "
-            "Suave = relleno muy liviano. "
-            "Relleno = más visible. "
-            "En todos los modos, al pasar el mouse se resalta la zona."
-        ),
-        format_func=lambda x: {
-            "contorno": "Solo contorno",
-            "suave": "Relleno suave",
-            "relleno": "Relleno marcado",
-        }.get(x, x),
-    )
 
     available = []
     missing = []
@@ -968,32 +953,116 @@ def _render_abordaje_mapa(
     for meta in available:
         by_group.setdefault(meta["group"], []).append(meta)
 
-    selected: list[str] = []
-    with st.expander(
-        "Capas GIS de abordaje (apagadas por defecto — actívalas solo si las necesitas)",
-        expanded=False,
-    ):
+    cfg_key = "abordaje_map_cfg"
+    with st.form("abordaje_map_filters"):
+        st.markdown("##### Capas del mapa")
         st.caption(
-            "Las zonas se dibujan como contorno/hover para no tapar los puntos del cruce."
+            "Marca lo que necesites y pulsa **Aplicar al mapa**. "
+            "Así no se regenera el mapa en cada casilla (~20 mil + ~19 mil puntos)."
         )
-        for group, items in by_group.items():
-            st.markdown(f"**{group}**")
-            if group == "Territorio (pesadas)":
-                st.caption("Muchos polígonos: la primera carga puede demorar.")
-            cols = st.columns(2)
-            for i, meta in enumerate(items):
-                with cols[i % 2]:
-                    heavy = " · pesada" if meta.get("heavy") else ""
-                    on = st.checkbox(
-                        f"{meta['label']}{heavy}",
-                        value=bool(meta.get("default")),
-                        key=f"abordaje_ly2_{meta['id']}",
-                    )
-                    if on:
-                        selected.append(meta["id"])
+        c3a, c3b, c3c = st.columns(3)
+        with c3a:
+            show_solo_ui = st.checkbox(
+                f"1×10 pendientes ({len(solo):,})".replace(",", "."),
+                value=True,
+                key="abordaje_show_solo",
+                help="Ubicaciones 1×10 sin cruce Habitable (representantes, GPS ok).",
+            )
+        with c3b:
+            show_hab_ui = st.checkbox(
+                f"Habitable semáforo ({len(hab_geo):,})".replace(",", "."),
+                value=True,
+                key="abordaje_show_hab",
+                help="Inspecciones con color VERDE / AMARILLO / ROJO / NEGRO.",
+            )
+        with c3c:
+            show_coin_ui = st.checkbox(
+                f"1×10 atendidas ({len(coin):,})".replace(",", "."),
+                value=False,
+                key="abordaje_show_coin",
+                help="Coincidencia alta/media con Habitable.",
+            )
+
+        zone_mode_ui = st.radio(
+            "Estilo de zonas GIS (máscaras / microzonas / cuadrículas)",
+            options=["contorno", "suave", "relleno"],
+            index=0,
+            horizontal=True,
+            key="abordaje_zone_mode",
+            help=(
+                "Contorno = solo borde (recomendado). "
+                "Suave = relleno muy liviano. "
+                "Relleno = más visible. "
+                "En todos los modos, al pasar el mouse se resalta la zona."
+            ),
+            format_func=lambda x: {
+                "contorno": "Solo contorno",
+                "suave": "Relleno suave",
+                "relleno": "Relleno marcado",
+            }.get(x, x),
+        )
+
+        selected_ui: list[str] = []
+        with st.expander(
+            "Capas GIS de abordaje (apagadas por defecto — actívalas solo si las necesitas)",
+            expanded=False,
+        ):
+            st.caption(
+                "Las zonas se dibujan como contorno/hover para no tapar los puntos del cruce."
+            )
+            for group, items in by_group.items():
+                st.markdown(f"**{group}**")
+                if group == "Territorio (pesadas)":
+                    st.caption("Muchos polígonos: la primera carga puede demorar.")
+                cols = st.columns(2)
+                for i, meta in enumerate(items):
+                    with cols[i % 2]:
+                        heavy = " · pesada" if meta.get("heavy") else ""
+                        on = st.checkbox(
+                            f"{meta['label']}{heavy}",
+                            value=bool(meta.get("default")),
+                            key=f"abordaje_ly2_{meta['id']}",
+                        )
+                        if on:
+                            selected_ui.append(meta["id"])
+
+        apply = st.form_submit_button(
+            "Aplicar al mapa",
+            type="primary",
+            use_container_width=True,
+        )
+
+    # Primera visita o «Aplicar»: congelar selección (evita rebuild por cada checkbox)
+    if apply or cfg_key not in st.session_state:
+        st.session_state[cfg_key] = {
+            "basemap": basemap_ui,
+            "view_name": view_ui,
+            "show_solo": show_solo_ui,
+            "show_hab": show_hab_ui,
+            "show_coin": show_coin_ui,
+            "zone_mode": zone_mode_ui,
+            "selected": tuple(sorted(selected_ui)),
+        }
+    else:
+        # Vista/base fuera del formulario: actualizar sin tocar capas pesadas
+        prev = st.session_state[cfg_key]
+        st.session_state[cfg_key] = {
+            **prev,
+            "basemap": basemap_ui,
+            "view_name": view_ui,
+        }
+
+    cfg = st.session_state[cfg_key]
+    basemap = cfg["basemap"]
+    view_name = cfg["view_name"]
+    show_solo = bool(cfg["show_solo"])
+    show_hab = bool(cfg["show_hab"])
+    show_coin = bool(cfg["show_coin"])
+    zone_mode = str(cfg["zone_mode"])
+    selected = list(cfg["selected"])
 
     if not selected and not (show_solo or show_hab or show_coin):
-        st.info("Activa al menos una capa GIS o una capa de puntos del cruce.")
+        st.info("Activa al menos una capa GIS o una capa de puntos del cruce y pulsa Aplicar.")
         return
 
     heavy_on = [
@@ -1005,6 +1074,12 @@ def _render_abordaje_mapa(
             + ", ".join(heavy_on)
             + ". La primera carga puede demorar."
         )
+
+    n_layers = sum([show_solo, show_hab, show_coin]) + len(selected)
+    st.caption(
+        f"Mapa con **{n_layers}** capa(s) aplicada(s). "
+        "Cambia casillas y pulsa **Aplicar al mapa** para regenerar."
+    )
 
     sol_cols = [
         "lat",
