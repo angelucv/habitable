@@ -36,56 +36,57 @@ BASEMAPS: dict[str, tuple[str, str, str]] = {
     ),
 }
 
-# Capas disponibles (parquet preferido; geojson de respaldo)
+# Capas GIS: por defecto APAGADAS (no tapan puntos del cruce).
+# Relleno muy suave; el detalle sale al pasar el mouse (hover), no como mancha permanente.
 LAYER_CATALOG: tuple[dict[str, Any], ...] = (
     {
         "id": "mascara_altagracia",
         "label": "Máscara Altagracia",
         "group": "Máscaras parroquiales",
-        "default": True,
+        "default": False,
         "heavy": False,
         "color": "#2563EB",
-        "fill_opacity": 0.18,
+        "fill_opacity": 0.04,
         "tooltip": ["Parroquia", "Municipio", "ENTIDAD", "Estado"],
     },
     {
         "id": "mascara_san_bernardino",
         "label": "Máscara San Bernardino",
         "group": "Máscaras parroquiales",
-        "default": True,
+        "default": False,
         "heavy": False,
         "color": "#7C3AED",
-        "fill_opacity": 0.18,
+        "fill_opacity": 0.04,
         "tooltip": ["Parroquia", "Municipio", "ENTIDAD", "Estado"],
     },
     {
         "id": "mascara_san_jose",
         "label": "Máscara San José",
         "group": "Máscaras parroquiales",
-        "default": True,
+        "default": False,
         "heavy": False,
         "color": "#DB2777",
-        "fill_opacity": 0.18,
+        "fill_opacity": 0.04,
         "tooltip": ["Parroquia", "Municipio", "ENTIDAD", "Estado"],
     },
     {
         "id": "mascara_petare",
         "label": "Máscara Petare",
         "group": "Máscaras parroquiales",
-        "default": True,
+        "default": False,
         "heavy": False,
         "color": "#0891B2",
-        "fill_opacity": 0.18,
+        "fill_opacity": 0.04,
         "tooltip": ["Parroquia", "Municipio", "Estado"],
     },
     {
         "id": "cuadricula_petare",
         "label": "Cuadrícula Petare (36 celdas · ~1 km)",
         "group": "Cuadrículas / bloques",
-        "default": True,
+        "default": False,
         "heavy": False,
         "color": "#0F766E",
-        "fill_opacity": 0.12,
+        "fill_opacity": 0.03,
         "tooltip": ["id", "row_index", "col_index"],
     },
     {
@@ -95,17 +96,17 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": False,
         "color": "#115E59",
-        "fill_opacity": 0.10,
+        "fill_opacity": 0.03,
         "tooltip": ["id", "row_index", "col_index"],
     },
     {
         "id": "bloques_la_guaira",
         "label": "Bloques La Guaira (~85 · ~600 m)",
         "group": "Cuadrículas / bloques",
-        "default": True,
+        "default": False,
         "heavy": False,
         "color": "#C2410C",
-        "fill_opacity": 0.22,
+        "fill_opacity": 0.05,
         "tooltip": ["BLOQUE", "SECTOR", "ZONA", "NOM_MAPA"],
     },
     {
@@ -115,8 +116,8 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": False,
         "color": "#B45309",
-        "fill_opacity": 0.25,
-        "tooltip": ["Name", "description"],
+        "fill_opacity": 0.04,
+        "tooltip": ["Name"],
     },
     {
         "id": "microzonas_laderas",
@@ -125,8 +126,8 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": False,
         "color": "#CA8A04",
-        "fill_opacity": 0.25,
-        "tooltip": ["Name", "description"],
+        "fill_opacity": 0.04,
+        "tooltip": ["Name"],
     },
     {
         "id": "microzonas_sedimentos",
@@ -135,8 +136,8 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": False,
         "color": "#65A30D",
-        "fill_opacity": 0.25,
-        "tooltip": ["Name", "description"],
+        "fill_opacity": 0.04,
+        "tooltip": ["Name"],
     },
     {
         "id": "puntos_db",
@@ -155,7 +156,7 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": True,
         "color": "#475569",
-        "fill_opacity": 0.05,
+        "fill_opacity": 0.02,
         "tooltip": ["Parroquia", "Municipio", "Estado"],
     },
     {
@@ -165,7 +166,7 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": True,
         "color": "#334155",
-        "fill_opacity": 0.04,
+        "fill_opacity": 0.02,
         "tooltip": ["Parroquia", "Municipio", "ENTIDAD"],
     },
     {
@@ -175,7 +176,7 @@ LAYER_CATALOG: tuple[dict[str, Any], ...] = (
         "default": False,
         "heavy": True,
         "color": "#64748B",
-        "fill_opacity": 0.06,
+        "fill_opacity": 0.02,
         "tooltip": ["COD_SEG", "NOM_PARROQ", "NOM_MUNICI", "NOM_ENTIDA"],
     },
 )
@@ -247,17 +248,34 @@ def _tile_layer(key: str, show: bool = True) -> folium.TileLayer:
     )
 
 
-def _style_fn(color: str, fill_opacity: float):
+def _style_fn(color: str, fill_opacity: float, *, outline_only: bool = False):
+    fill = 0.0 if outline_only else fill_opacity
+
     def _style(_feature):
         return {
             "fillColor": color,
             "color": color,
-            "weight": 1.2,
-            "fillOpacity": fill_opacity,
-            "opacity": 0.85,
+            "weight": 1.0,
+            "fillOpacity": fill,
+            "opacity": 0.75,
         }
 
     return _style
+
+
+def _highlight_fn(color: str):
+    """Resalta la zona solo al pasar el mouse (no tapa de forma permanente)."""
+
+    def _hi(_feature):
+        return {
+            "fillColor": color,
+            "color": color,
+            "weight": 2.5,
+            "fillOpacity": 0.22,
+            "opacity": 0.95,
+        }
+
+    return _hi
 
 
 def _tooltip_fields(props: dict, keys: list[str]) -> str:
@@ -397,6 +415,7 @@ def _build_map(
     show_solo: bool = False,
     show_coin: bool = False,
     show_hab: bool = False,
+    zone_mode: str = "contorno",
 ) -> str:
     from io import BytesIO
 
@@ -471,18 +490,29 @@ def _build_map(
             sample_props = (
                 (data["features"][0].get("properties") or {}) if data["features"] else {}
             )
-            fields = [k for k in tip_keys if k in sample_props]
+            fields = [k for k in tip_keys if k in sample_props and k.lower() != "description"]
+            outline_only = zone_mode == "contorno"
+            base_fill = float(meta.get("fill_opacity", 0.04))
+            if zone_mode == "relleno":
+                base_fill = max(base_fill, 0.12)
             gj_kwargs: dict[str, Any] = {
                 "name": name,
-                "style_function": _style_fn(color, float(meta.get("fill_opacity", 0.15))),
+                "style_function": _style_fn(
+                    color, base_fill, outline_only=outline_only
+                ),
+                "highlight_function": _highlight_fn(color),
                 "show": True,
             }
             if fields:
                 gj_kwargs["tooltip"] = folium.GeoJsonTooltip(
                     fields=fields,
                     aliases=fields,
-                    sticky=True,
+                    sticky=False,
                     labels=True,
+                    style=(
+                        "background-color:white;border:1px solid #ccc;"
+                        "border-radius:4px;padding:6px;font-size:12px;"
+                    ),
                 )
             folium.GeoJson(data, **gj_kwargs).add_to(m)
 
@@ -743,6 +773,25 @@ def page_abordaje(
             help="Coincidencia alta/media con Habitable.",
         )
 
+    zone_mode = st.radio(
+        "Estilo de zonas GIS (máscaras / microzonas / cuadrículas)",
+        options=["contorno", "suave", "relleno"],
+        index=0,
+        horizontal=True,
+        key="abordaje_zone_mode",
+        help=(
+            "Contorno = solo borde (recomendado). "
+            "Suave = relleno muy liviano. "
+            "Relleno = más visible. "
+            "En todos los modos, al pasar el mouse se resalta la zona."
+        ),
+        format_func=lambda x: {
+            "contorno": "Solo contorno",
+            "suave": "Relleno suave",
+            "relleno": "Relleno marcado",
+        }.get(x, x),
+    )
+
     available = []
     missing = []
     for meta in LAYER_CATALOG:
@@ -759,7 +808,13 @@ def page_abordaje(
         by_group.setdefault(meta["group"], []).append(meta)
 
     selected: list[str] = []
-    with st.expander("Capas GIS de abordaje", expanded=True):
+    with st.expander(
+        "Capas GIS de abordaje (apagadas por defecto — actívalas solo si las necesitas)",
+        expanded=False,
+    ):
+        st.caption(
+            "Las zonas se dibujan como contorno/hover para no tapar los puntos del cruce."
+        )
         for group, items in by_group.items():
             st.markdown(f"**{group}**")
             if group == "Territorio (pesadas)":
@@ -771,7 +826,7 @@ def page_abordaje(
                     on = st.checkbox(
                         f"{meta['label']}{heavy}",
                         value=bool(meta.get("default")),
-                        key=f"abordaje_ly_{meta['id']}",
+                        key=f"abordaje_ly2_{meta['id']}",
                     )
                     if on:
                         selected.append(meta["id"])
@@ -837,13 +892,13 @@ def page_abordaje(
             show_solo=show_solo,
             show_coin=show_coin,
             show_hab=show_hab,
+            zone_mode=zone_mode,
         )
     components.html(html, height=700, scrolling=False)
 
     st.caption(
-        "Al hacer clic en un punto: fuente (1×10 / Habitable), códigos de caso, "
-        "cantidad asociada y, en Habitable, si cruza con demanda 1×10. "
-        "Tamaño compacto como en 1×10 pendientes."
+        "Puntos: clic para detalle (fuente, códigos, cruce). "
+        "Zonas GIS: contorno + resalte al pasar el mouse (no mancha permanente)."
     )
 
     with st.expander("Inventario de capas GIS en disco", expanded=False):
@@ -873,6 +928,7 @@ def _cached_abordaje_html(
     show_solo: bool = False,
     show_coin: bool = False,
     show_hab: bool = False,
+    zone_mode: str = "contorno",
 ) -> str:
     return _build_map(
         selected_ids,
@@ -884,4 +940,5 @@ def _cached_abordaje_html(
         show_solo=show_solo,
         show_coin=show_coin,
         show_hab=show_hab,
+        zone_mode=zone_mode,
     )
