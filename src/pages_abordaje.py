@@ -330,34 +330,13 @@ def _match_label(cat: str) -> str:
     }.get(str(cat or ""), str(cat or "—"))
 
 
-def _circle_batch_callback() -> str:
-    """
-    Callback JS para FastMarkerCluster: dibuja CircleMarker individuales
-    (sin agrupar en zoom operativo). Filas: [lat, lng, popup, radius, color, tooltip].
-    """
-    return """
-function (row) {
-    var marker = L.circleMarker(new L.LatLng(row[0], row[1]), {
-        radius: row[3] || 1.5,
-        color: row[4] || '#334155',
-        fillColor: row[4] || '#334155',
-        fillOpacity: 0.7,
-        weight: 1
-    });
-    if (row[2]) { marker.bindPopup(row[2]); }
-    if (row[5]) { marker.bindTooltip(row[5], {sticky: true}); }
-    return marker;
-};
-"""
-
-
-# Sin clustering visual en zooms útiles (≤22); el plugin solo acelera el armado JS.
-_BATCH_MARKER_OPTIONS = {
-    "disableClusteringAtZoom": 22,
-    "maxClusterRadius": 1,
-    "spiderfyOnMaxZoom": False,
-    "showCoverageOnHover": False,
-}
+def _scale_radius(r: float, *, min_r: float = 3.5, max_r: float = 12.0) -> float:
+    """Radio visible en pantalla (el lote JS mantiene el rendimiento)."""
+    try:
+        v = float(r)
+    except (TypeError, ValueError):
+        v = min_r
+    return max(min_r, min(max_r, v))
 
 
 def _add_circle_batch(
@@ -367,18 +346,57 @@ def _add_circle_batch(
     name: str,
     show: bool = True,
 ) -> None:
-    """Añade miles de círculos en un solo lote JS (evita CircleMarker Python 1 a 1)."""
+    """
+    Círculos individuales en un lote JS (sin MarkerCluster / sin burbujas).
+    Filas: [lat, lng, popup, radius, color, tooltip].
+    """
     if not rows:
         return
-    from folium.plugins import FastMarkerCluster
 
-    FastMarkerCluster(
-        data=rows,
-        callback=_circle_batch_callback(),
-        name=name,
-        show=show,
-        options=dict(_BATCH_MARKER_OPTIONS),
-    ).add_to(fmap)
+    from folium.map import Layer
+    from jinja2 import Template
+
+    payload_rows = rows  # lista Python → tojson en plantilla
+
+    class BatchCircleLayer(Layer):
+        _template = Template(
+            """
+            {% macro script(this, kwargs) %}
+                var {{ this.get_name() }} = L.featureGroup();
+                var {{ this.get_name() }}_renderer = L.canvas({ padding: 0.5 });
+                var {{ this.get_name() }}_data = {{ this.data|tojson }};
+                for (var i = 0; i < {{ this.get_name() }}_data.length; i++) {
+                    var r = {{ this.get_name() }}_data[i];
+                    var mk = L.circleMarker([r[0], r[1]], {
+                        renderer: {{ this.get_name() }}_renderer,
+                        radius: r[3] || 4,
+                        color: "#0F172A",
+                        fillColor: r[4] || "#334155",
+                        fillOpacity: 0.9,
+                        weight: 1.25,
+                        opacity: 1
+                    });
+                    if (r[2]) { mk.bindPopup(r[2], { maxWidth: 380 }); }
+                    if (r[5]) {
+                        mk.bindTooltip(r[5], {
+                            sticky: true,
+                            direction: "top",
+                            opacity: 0.95
+                        });
+                    }
+                    {{ this.get_name() }}.addLayer(mk);
+                }
+                {{ this._parent.get_name() }}.addLayer({{ this.get_name() }});
+            {% endmacro %}
+            """
+        )
+
+        def __init__(self, data_rows: list, name: str | None = None, show: bool = True):
+            super().__init__(name=name, overlay=True, control=True, show=show)
+            self._name = "BatchCircles"
+            self.data = data_rows
+
+    BatchCircleLayer(payload_rows, name=name, show=show).add_to(fmap)
 
 
 def _enrich_hab_con_1x10(hab, sol):
@@ -527,7 +545,14 @@ def _build_map(
                     },
                 )
                 rows_pts.append(
-                    [float(coords[1]), float(coords[0]), popup, 1.5, color, tip]
+                    [
+                        float(coords[1]),
+                        float(coords[0]),
+                        popup,
+                        _scale_radius(4.0),
+                        color,
+                        tip,
+                    ]
                 )
             _add_circle_batch(m, rows_pts, name=name, show=True)
         else:
@@ -578,7 +603,7 @@ def _build_map(
         for r in solo.dropna(subset=["lat", "lng"]).itertuples(index=False):
             n = _volumen_casos(r)
             color = _color_por_volumen(n)
-            radius = _radius_por_volumen(n)
+            radius = _scale_radius(_radius_por_volumen(n) + 1.5, min_r=4.0)
             dir_show = getattr(r, "direccion_display", None) or getattr(
                 r, "direccion", ""
             )
@@ -610,7 +635,7 @@ def _build_map(
         rows = []
         for r in coin.dropna(subset=["lat", "lng"]).itertuples(index=False):
             n = _volumen_casos(r)
-            radius = _radius_por_volumen(n)
+            radius = _scale_radius(_radius_por_volumen(n) + 1.5, min_r=4.0)
             dist = getattr(r, "match_dist_m", None)
             popup = _fmt_popup(
                 "Fuente: 1×10 + Habitable (cruzado)",
@@ -663,7 +688,16 @@ def _build_map(
                 },
             )
             tip = f"Habitable {et} · 1×10: {en_x10}"
-            rows.append([float(r.lat), float(r.lng), popup, 1.5, color, tip])
+            rows.append(
+                [
+                    float(r.lat),
+                    float(r.lng),
+                    popup,
+                    _scale_radius(4.5, min_r=4.0),
+                    color,
+                    tip,
+                ]
+            )
         _add_circle_batch(
             m,
             rows,
@@ -1129,6 +1163,7 @@ def _render_abordaje_mapa(
             show_coin=show_coin,
             show_hab=show_hab,
             zone_mode=zone_mode,
+            viz_version=3,
         )
     components.html(html, height=700, scrolling=False)
 
@@ -1165,6 +1200,7 @@ def _cached_abordaje_html(
     show_coin: bool = False,
     show_hab: bool = False,
     zone_mode: str = "contorno",
+    viz_version: int = 3,
 ) -> str:
     return _build_map(
         selected_ids,
