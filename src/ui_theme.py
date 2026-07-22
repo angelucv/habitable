@@ -1370,14 +1370,20 @@ def render_section_subtabs(section) -> str:
     """Pestañas internas de una sección (estado separado de la navegación global)."""
     options = [(it.id, it.label) for it in section.items]
     tab_key = f"nav_tab_{section.id}"
+    written_key = f"_nav_tab_written_{section.id}"
     valid = {k for k, _ in options}
-    # Si llegamos desde el índice/sidebar a un ítem de esta sección, alinear pestaña
+    # Alinear desde índice/sidebar SOLO si nav_item cambió desde fuera.
+    # Si siempre copiáramos nav_item → pestaña, un clic en la 2ª pestaña se
+    # anularía en el rerun (nav_item aún apunta a la 1ª hasta que app.py lo
+    # actualiza después de este render).
     current_nav = st.session_state.get("nav_item")
-    if current_nav in valid:
+    last_written = st.session_state.get(written_key)
+    if current_nav in valid and current_nav != last_written:
         st.session_state[tab_key] = current_nav
     chosen = render_section_tabs(
         options,
         state_key=tab_key,
         heading=f"Pestañas · {section.label}",
     )
+    st.session_state[written_key] = chosen
     return chosen
