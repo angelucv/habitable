@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import numpy as np
@@ -1344,54 +1345,139 @@ una sola vez.
         pend = pend.copy()
         pend["n_reportes"] = pend["cantidad_casos"]
 
-    todos = frame_ubicaciones_inspeccion(
-        sol,
-        solo_pendientes=False,
-        solo_mapa_ok=not incluir_gps_dudoso,
-        estados=filt_est or None,
-        municipios=filt_mun or None,
-        parroquias=filt_parr or None,
-        min_casos=min_eff,
-    )
     rp = resumen_ubicaciones(pend)
 
-    d1, d2, d3 = st.columns([1, 1, 2.2])
+    # Firma del filtro activo (tabla/mapa). Streamlit puede servir un
+    # download_button con payload viejo si el key no cambia con el filtro.
+    filt_payload = {
+        "est": sorted(filt_est or []),
+        "mun": sorted(filt_mun or []),
+        "parr": sorted(filt_parr or []),
+        "min": int(min_eff),
+        "gps_dudoso": bool(incluir_gps_dudoso),
+        "n_pend": int(len(pend)),
+    }
+    filt_sig = hashlib.sha1(
+        json.dumps(filt_payload, ensure_ascii=True, sort_keys=True).encode(
+            "utf-8"
+        )
+    ).hexdigest()[:12]
+    export_ss = "ri_export_bytes"
+    export = st.session_state.get(export_ss)
+    export_ok = isinstance(export, dict) and export.get("sig") == filt_sig
+
+    extra_gps = (
+        f" · ocultos por GPS dudoso/mar: **{fmt_num(n_excl_gps)}**"
+        if (not incluir_gps_dudoso and n_excl_gps)
+        else ""
+    )
+    alcance = []
+    if filt_est:
+        alcance.append(
+            "Estados: "
+            + ", ".join(filt_est[:3])
+            + ("…" if len(filt_est) > 3 else "")
+        )
+    else:
+        alcance.append("Estados: todos")
+    if filt_mun:
+        alcance.append(f"Municipios: {len(filt_mun)}")
+    if filt_parr:
+        alcance.append(f"Parroquias: {len(filt_parr)}")
+    if min_eff > 1:
+        alcance.append(f"Mín. casos: {min_eff}")
+
+    st.caption(
+        f"**{fmt_num(len(pend))}** ubicaciones pendientes · "
+        f"**{fmt_num(rp['n_casos'])}** casos 1×10 en total · "
+        f"**{fmt_num(rp['n_multi'])}** ubicaciones con 2 o más reportes · "
+        f"máximo **{fmt_num(rp['max_casos'])}** casos en un mismo punto"
+        f"{extra_gps}"
+    )
+    st.caption(
+        "Filtro activo · "
+        + " · ".join(alcance)
+        + f" · id `{filt_sig}`"
+    )
+
+    # CSV ligero siempre alineado al filtro; Excel solo al preparar
+    # (evita payload stale + bloqueo al regenerar xlsx en cada clic).
+    csv_bytes = pend.to_csv(index=False).encode("utf-8-sig")
+    d1, d2, d3 = st.columns([1, 1, 1.4])
     with d1:
         st.download_button(
             "CSV filtrado",
-            data=pend.to_csv(index=False).encode("utf-8-sig"),
-            file_name="pendientes_1x10_por_ubicacion_filtrado.csv",
+            data=csv_bytes,
+            file_name=f"pendientes_1x10_filtrado_{filt_sig}.csv",
             mime="text/csv",
             use_container_width=True,
-            key=f"dl_{sec}_csv",
+            key=f"dl_{sec}_csv_{filt_sig}",
         )
     with d2:
-        xlsx = excel_bytes_reportes_inspeccion(pend, todos, summary=summary)
-        st.download_button(
-            "Excel filtrado",
-            data=xlsx,
-            file_name="reportes_1x10_pendientes_filtrado.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument"
-                ".spreadsheetml.sheet"
-            ),
-            type="primary",
+        prep = st.button(
+            "Preparar Excel filtrado",
             use_container_width=True,
-            key=f"dl_{sec}_xlsx",
+            type="primary" if not export_ok else "secondary",
+            key=f"prep_{sec}_xlsx_{filt_sig}",
+            help=(
+                "Genera el Excel con el filtro actual. "
+                "Obligatorio tras cambiar Estado/Municipio/… "
+                "antes de descargar."
+            ),
         )
+        if prep:
+            with st.spinner("Generando Excel con el filtro actual…"):
+                todos = frame_ubicaciones_inspeccion(
+                    sol,
+                    solo_pendientes=False,
+                    solo_mapa_ok=not incluir_gps_dudoso,
+                    estados=filt_est or None,
+                    municipios=filt_mun or None,
+                    parroquias=filt_parr or None,
+                    min_casos=min_eff,
+                )
+                st.session_state[export_ss] = {
+                    "sig": filt_sig,
+                    "n": int(len(pend)),
+                    "xlsx": excel_bytes_reportes_inspeccion(
+                        pend, todos, summary=summary
+                    ),
+                    "alcance": " · ".join(alcance),
+                }
+            st.rerun()
     with d3:
-        extra_gps = (
-            f" · ocultos por GPS dudoso/mar: **{fmt_num(n_excl_gps)}**"
-            if (not incluir_gps_dudoso and n_excl_gps)
-            else ""
-        )
-        st.caption(
-            f"**{fmt_num(len(pend))}** ubicaciones pendientes · "
-            f"**{fmt_num(rp['n_casos'])}** casos 1×10 en total · "
-            f"**{fmt_num(rp['n_multi'])}** ubicaciones con 2 o más reportes · "
-            f"máximo **{fmt_num(rp['max_casos'])}** casos en un mismo punto"
-            f"{extra_gps}"
-        )
+        if export_ok and isinstance(export, dict) and "xlsx" in export:
+            st.download_button(
+                f"Excel filtrado ({fmt_num(export.get('n', len(pend)))} ub.)",
+                data=export["xlsx"],
+                file_name=(
+                    f"reportes_1x10_pendientes_filtrado_{filt_sig}.xlsx"
+                ),
+                mime=(
+                    "application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet"
+                ),
+                use_container_width=True,
+                key=f"dl_{sec}_xlsx_{filt_sig}",
+            )
+        else:
+            prev_n = (
+                export.get("n")
+                if isinstance(export, dict)
+                else None
+            )
+            if isinstance(export, dict) and export.get("sig") != filt_sig:
+                st.warning(
+                    "El Excel listo es de **otro filtro**"
+                    + (
+                        f" ({fmt_num(prev_n)} ub.)"
+                        if prev_n is not None
+                        else ""
+                    )
+                    + ". Pulsa **Preparar Excel filtrado**."
+                )
+            else:
+                st.info("Pulsa **Preparar Excel filtrado** para bajarlo.")
 
     if sec == "mapa":
         render_pendientes_map_ui(pend)
