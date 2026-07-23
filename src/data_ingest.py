@@ -8,6 +8,12 @@ from pathlib import Path
 import streamlit as st
 
 from prepare_data import run_pipeline
+from runtime_limits import (
+    check_upload_size,
+    pipeline_blocked_message,
+    pipeline_max_rows,
+    upload_max_mb,
+)
 from ui_theme import render_section
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +50,11 @@ def render_upload_panel() -> None:
         "Sube el Excel de solicitudes 1×10 y el Excel/CSV de inspecciones Habitable. "
         "Al procesar se regeneran el mapa y los dos análisis.",
     )
+    st.caption(f"Tope por archivo: **{upload_max_mb()} MB** (BI_UPLOAD_MAX_MB).")
+
+    blocked = pipeline_blocked_message()
+    if blocked:
+        st.warning(blocked)
 
     _ensure_upload_dir()
     path_1x10 = UPLOAD_DIR / "solicitudes_1x10.xlsx"
@@ -84,11 +95,30 @@ def render_upload_panel() -> None:
             "Procesar cruce y actualizar pestañas",
             type="primary",
             use_container_width=True,
+            disabled=bool(blocked),
         )
     with b2:
         st.caption("Puede tardar 1–2 minutos con archivos grandes.")
 
     if run:
+        if blocked:
+            st.error(blocked)
+            return
+
+        err1 = check_upload_size(f1, label="1×10") if f1 else None
+        err2 = check_upload_size(f2, label="Habitable") if f2 else None
+        if err1 or err2:
+            from audit_log import log_event
+
+            log_event(
+                "upload_reject",
+                username=str(st.session_state.get("bi_username") or ""),
+                role=str(st.session_state.get("bi_role") or ""),
+                detail={"error": err1 or err2},
+            )
+            st.error(err1 or err2)
+            return
+
         if f1:
             _save_upload(f1, path_1x10)
         if f2:
@@ -127,6 +157,26 @@ def render_upload_panel() -> None:
                 )
                 st.error(f"No se pudo procesar: {exc}")
                 return
+
+        # Guardrail post-proceso (filas excesivas)
+        n_total = int(summary.get("n_1x10") or 0) + int(summary.get("n_hab") or 0)
+        max_rows = pipeline_max_rows()
+        if max_rows is not None and n_total > max_rows:
+            from audit_log import log_event
+
+            log_event(
+                "pipeline_rows_warn",
+                username=str(st.session_state.get("bi_username") or ""),
+                role=str(st.session_state.get("bi_role") or ""),
+                detail={"n_total": n_total, "max_rows": max_rows},
+            )
+            st.warning(
+                f"El cruce tiene {n_total:,} filas combinadas "
+                f"(tope orientativo {max_rows:,}). "
+                "Considere filtrar fuentes o subir BI_PIPELINE_MAX_ROWS.".replace(
+                    ",", "."
+                )
+            )
 
         from audit_log import log_event
 

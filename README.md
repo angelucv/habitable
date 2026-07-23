@@ -50,3 +50,5 @@ Abrir http://localhost:8501
   # Solo si TI autoriza temporales públicos:
   # $env:BI_ALLOW_PUBLIC_TILES = "1"
   ```
+- **Límites de carga:** `BI_UPLOAD_MAX_MB` (default 40; 25 en bajo consumo).
+  En Render el pipeline pesado queda bloqueado salvo `BI_ALLOW_HEAVY_PIPELINE=1`.

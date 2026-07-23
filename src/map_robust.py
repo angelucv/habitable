@@ -606,8 +606,10 @@ def render_map_ui(
             "Si el mapa tarda, reduce capas o filtra por territorio."
         )
 
-    # Sin tope: todos los puntos del filtro actual
-    max_markers = None
+    # Tope de marcadores en bajo consumo / Render (BI_MAP_MAX_MARKERS)
+    from runtime_limits import map_max_markers
+
+    max_markers = map_max_markers()
     # Siempre cargar todas las bases en el LayerControl del mapa
     show_extra = True
 
