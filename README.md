@@ -42,3 +42,11 @@ Abrir http://localhost:8501
   python scripts\encrypt_data_at_rest.py
   ```
   Sin clave, en desarrollo los archivos pueden quedar en claro; con `BI_REQUIRE_AUTH=1` la clave es obligatoria.
+- **Mapas base (tiles):** en producción no se usan OSM/Carto/Esri.
+  Configure tiles internos:
+  ```powershell
+  $env:BI_TILES_URL = "https://tiles.institucion.local/{z}/{x}/{y}.png"
+  $env:BI_TILES_ATTR = "© Institución"
+  # Solo si TI autoriza temporales públicos:
+  # $env:BI_ALLOW_PUBLIC_TILES = "1"
+  ```

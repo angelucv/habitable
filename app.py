@@ -248,6 +248,12 @@ def main():
             st.caption("Cifrado en reposo: **activo** (BI_DATA_KEY).")
         else:
             st.caption("Cifrado en reposo: inactivo (solo desarrollo).")
+        try:
+            from map_tiles import tile_policy_caption
+
+            st.caption(tile_policy_caption())
+        except Exception:
+            pass
         if allow_contact:
             st.caption("Permiso de contacto: sí (operador/admin).")
         else:

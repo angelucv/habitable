@@ -11,31 +11,15 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Basemaps públicos (sin API key)
-BASEMAPS: dict[str, tuple[str, str, str]] = {
-    "OpenStreetMap": ("OpenStreetMap", "© OpenStreetMap", "OpenStreetMap"),
-    "OSM claro (Carto)": ("CartoDB positron", "© OpenStreetMap © CARTO", "OSM claro"),
-    "OSM oscuro (Carto)": (
-        "CartoDB dark_matter",
-        "© OpenStreetMap © CARTO",
-        "OSM oscuro",
-    ),
-    "Satélite (Esri)": (
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "Tiles © Esri",
-        "Satélite Esri",
-    ),
-    "Calles (Esri)": (
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-        "Tiles © Esri",
-        "Calles Esri",
-    ),
-    "Topográfico": (
-        "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "© OpenStreetMap © OpenTopoMap",
-        "Topográfico",
-    ),
-}
+from map_tiles import (
+    add_basemap_layers,
+    available_basemaps,
+    default_basemap_key,
+    tile_policy_caption,
+)
+
+# Compat: catálogo dinámico (política ministerio)
+BASEMAPS = available_basemaps(lite=False)
 
 ETIQUETA_HEX = {
     "VERDE": "#228B22",
@@ -55,26 +39,10 @@ VIEWS = {
 FAST_THRESHOLD = 400
 
 
-def _tile_layer(key: str, show: bool = False) -> folium.TileLayer:
-    tiles, attr, name = BASEMAPS[key]
-    if tiles.startswith("http"):
-        return folium.TileLayer(
-            tiles=tiles,
-            attr=attr,
-            name=name,
-            show=show,
-            overlay=False,
-            control=True,
-            max_zoom=19,
-        )
-    return folium.TileLayer(
-        tiles=tiles,
-        name=name,
-        show=show,
-        overlay=False,
-        control=True,
-        max_zoom=19,
-    )
+def _tile_layer(key: str, show: bool = False) -> folium.TileLayer | None:
+    from map_tiles import make_tile_layer
+
+    return make_tile_layer(key, basemaps=available_basemaps(lite=False), show=show)
 
 
 def _esc(val: Any) -> str:
@@ -347,14 +315,11 @@ def build_map(
         prefer_canvas=True,
     )
 
-    primary = basemap if basemap in BASEMAPS else "OSM claro (Carto)"
-    _tile_layer(primary, show=True).add_to(fmap)
-
-    if show_extra_basemaps:
-        for key in BASEMAPS:
-            if key == primary:
-                continue
-            _tile_layer(key, show=False).add_to(fmap)
+    bm = available_basemaps(lite=False)
+    primary = basemap if basemap in bm else default_basemap_key(bm)
+    add_basemap_layers(
+        fmap, primary, basemaps=bm, show_extras=show_extra_basemaps
+    )
 
     # Heatmaps primero (baratos); marcadores después
     if show_heat_pend and show_solo:
@@ -530,13 +495,17 @@ def render_map_ui(
 
     c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
     with c1:
+        bm = available_basemaps(lite=False)
+        keys = list(bm.keys())
+        default_k = default_basemap_key(bm)
         basemap = st.selectbox(
             "Mapa base",
-            options=list(BASEMAPS.keys()),
-            index=list(BASEMAPS.keys()).index("OSM claro (Carto)"),
+            options=keys,
+            index=keys.index(default_k) if default_k in keys else 0,
             key="map_op_basemap",
-            help="También en el control de capas del mapa.",
+            help="En producción solo tiles institucionales (BI_TILES_URL).",
         )
+        st.caption(tile_policy_caption())
     with c2:
         view_name = st.selectbox(
             "Vista",
@@ -833,13 +802,11 @@ def build_pendientes_map(
         control_scale=True,
         prefer_canvas=True,
     )
-    primary = basemap if basemap in BASEMAPS else "OSM claro (Carto)"
-    _tile_layer(primary, show=True).add_to(fmap)
-    if show_extra_basemaps:
-        for key in BASEMAPS:
-            if key == primary:
-                continue
-            _tile_layer(key, show=False).add_to(fmap)
+    bm = available_basemaps(lite=False)
+    primary = basemap if basemap in bm else default_basemap_key(bm)
+    add_basemap_layers(
+        fmap, primary, basemaps=bm, show_extras=show_extra_basemaps
+    )
 
     if show_heat:
         _add_heatmap_weighted(
@@ -951,13 +918,16 @@ def render_pendientes_map_ui(ubicaciones: pd.DataFrame) -> None:
     # Una sola franja de controles (menos scroll hasta el mapa)
     c1, c2, c3, c4 = st.columns([1.2, 1.1, 1.6, 1.4])
     with c1:
+        bm = available_basemaps(lite=False)
+        keys = list(bm.keys())
+        default_k = default_basemap_key(bm)
         basemap = st.selectbox(
             "Base",
-            options=list(BASEMAPS.keys()),
-            index=list(BASEMAPS.keys()).index("OSM claro (Carto)"),
+            options=keys,
+            index=keys.index(default_k) if default_k in keys else 0,
             key="pend_basemap",
             label_visibility="collapsed",
-            help="Mapa base",
+            help="Mapa base · política tiles ministerio",
         )
         st.caption("Base")
     with c2:

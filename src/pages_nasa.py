@@ -28,20 +28,7 @@ VIEWS = {
     "AOI NASA (norte)": (10.45, -67.3, 9),
 }
 
-BASEMAPS: dict[str, tuple[str, str, str]] = {
-    "OSM claro (Carto)": ("CartoDB positron", "© OpenStreetMap © CARTO", "OSM claro"),
-    "OpenStreetMap": ("OpenStreetMap", "© OpenStreetMap", "OpenStreetMap"),
-    "Satélite (Esri)": (
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "Tiles © Esri",
-        "Satélite Esri",
-    ),
-    "Topográfico": (
-        "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "© OpenStreetMap © OpenTopoMap",
-        "Topográfico",
-    ),
-}
+BASEMAPS: dict[str, tuple[str, str, str]] = {}  # runtime vía map_tiles
 
 NASA_COLORS = {
     "likely_damaged": "#DC2626",
@@ -94,26 +81,10 @@ def _fmt_popup(title: str, fields: dict[str, Any]) -> str:
     return "<br/>".join(parts)
 
 
-def _tile_layer(key: str, show: bool = True) -> folium.TileLayer:
-    tiles, attr, name = BASEMAPS[key]
-    if tiles.startswith("http"):
-        return folium.TileLayer(
-            tiles=tiles,
-            attr=attr,
-            name=name,
-            show=show,
-            overlay=False,
-            control=True,
-            max_zoom=19,
-        )
-    return folium.TileLayer(
-        tiles=tiles,
-        name=name,
-        show=show,
-        overlay=False,
-        control=True,
-        max_zoom=19,
-    )
+def _tile_layer(key: str, show: bool = True) -> folium.TileLayer | None:
+    from map_tiles import available_basemaps, make_tile_layer
+
+    return make_tile_layer(key, basemaps=available_basemaps(lite=True), show=show)
 
 
 def _fmt_n(n: int) -> str:
@@ -240,6 +211,8 @@ def _cached_nasa_html(
     show_ia: bool,
     layer_names: tuple[str, ...],
 ) -> str:
+    from map_tiles import add_basemap_layers, available_basemaps, default_basemap_key
+
     lat, lng, zoom = VIEWS[view_name]
     m = folium.Map(
         location=[lat, lng],
@@ -248,10 +221,9 @@ def _cached_nasa_html(
         control_scale=True,
         prefer_canvas=True,
     )
-    m.add_child(_tile_layer(basemap, show=True))
-    for key in BASEMAPS:
-        if key != basemap:
-            m.add_child(_tile_layer(key, show=False))
+    bm = available_basemaps(lite=True)
+    primary = basemap if basemap in bm else default_basemap_key(bm)
+    add_basemap_layers(m, primary, basemaps=bm, show_extras=True)
 
     nasa_likely = _read_bytes(likely_b)
     nasa_coinc = _read_bytes(coinc_b)
@@ -456,14 +428,21 @@ def page_nasa(
     )
     nasa_inv = lite[lite["kind"] == "inventario_500m"].copy()
 
+    from map_tiles import available_basemaps, default_basemap_key, tile_policy_caption
+
     c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
     with c1:
+        bm = available_basemaps(lite=True)
+        keys = list(bm.keys())
+        default_k = default_basemap_key(bm)
         basemap = st.selectbox(
             "Mapa base",
-            options=list(BASEMAPS.keys()),
-            index=0,
+            options=keys,
+            index=keys.index(default_k) if default_k in keys else 0,
             key="nasa_basemap",
+            help="En producción: BI_TILES_URL (sin OSM/Esri).",
         )
+        st.caption(tile_policy_caption())
     with c2:
         view_name = st.selectbox(
             "Vista inicial",

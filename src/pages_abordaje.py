@@ -21,20 +21,7 @@ VIEWS = {
     "Nacional (norte VE)": (10.4, -67.5, 7),
 }
 
-BASEMAPS: dict[str, tuple[str, str, str]] = {
-    "OSM claro (Carto)": ("CartoDB positron", "© OpenStreetMap © CARTO", "OSM claro"),
-    "OpenStreetMap": ("OpenStreetMap", "© OpenStreetMap", "OpenStreetMap"),
-    "Satélite (Esri)": (
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "Tiles © Esri",
-        "Satélite Esri",
-    ),
-    "Topográfico": (
-        "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "© OpenStreetMap © OpenTopoMap",
-        "Topográfico",
-    ),
-}
+BASEMAPS: dict[str, tuple[str, str, str]] = {}  # se resuelve en runtime vía map_tiles
 
 # Capas GIS: por defecto APAGADAS (no tapan puntos del cruce).
 # Relleno muy suave; el detalle sale al pasar el mouse (hover), no como mancha permanente.
@@ -226,26 +213,10 @@ def _load_geojson_dict(stem: str) -> dict | None:
     return None
 
 
-def _tile_layer(key: str, show: bool = True) -> folium.TileLayer:
-    tiles, attr, name = BASEMAPS[key]
-    if tiles.startswith("http"):
-        return folium.TileLayer(
-            tiles=tiles,
-            attr=attr,
-            name=name,
-            show=show,
-            overlay=False,
-            control=True,
-            max_zoom=19,
-        )
-    return folium.TileLayer(
-        tiles=tiles,
-        name=name,
-        show=show,
-        overlay=False,
-        control=True,
-        max_zoom=19,
-    )
+def _tile_layer(key: str, show: bool = True) -> folium.TileLayer | None:
+    from map_tiles import available_basemaps, make_tile_layer
+
+    return make_tile_layer(key, basemaps=available_basemaps(lite=True), show=show)
 
 
 def _style_fn(
@@ -622,6 +593,7 @@ def _build_map(
 
     import pandas as pd
 
+    from map_tiles import add_basemap_layers, available_basemaps, default_basemap_key
     from map_robust import (
         ETIQUETA_HEX,
         _color_por_volumen,
@@ -637,11 +609,9 @@ def _build_map(
         control_scale=True,
         prefer_canvas=True,
     )
-    m.add_child(_tile_layer(basemap, show=True))
-    for key in BASEMAPS:
-        if key == basemap:
-            continue
-        m.add_child(_tile_layer(key, show=False))
+    bm = available_basemaps(lite=True)
+    primary = basemap if basemap in bm else default_basemap_key(bm)
+    add_basemap_layers(m, primary, basemaps=bm, show_extras=True)
 
     _ensure_map_panes(m)
 
@@ -815,7 +785,7 @@ def page_abordaje(
 
 
 def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
-    """Pestaña: generar Excel/CSV 1×10 × capas GIS + estado Habitable."""
+    """Pestaña: generar Excel/CSV maestro 1×10 × capas + Habitable + IA + NASA."""
     import io
 
     import pandas as pd
@@ -826,9 +796,9 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
 
     render_section(
         "Descargar cruce territorial",
-        "Listado de casos 1×10 con cruce a las capas de Mapas de abordaje "
-        "(máscaras, cuadrículas, microzonas, parroquias INE, segmentos censales) "
-        "y el estado de inspección Habitable cuando hay match.",
+        "Archivo maestro para el equipo 1×10: cada ubicación con cruce Habitable, "
+        "capas de abordaje (máscaras, cuadrículas, microzonas, parroquias INE, "
+        "segmentos censales), IA (vecino ≤ 50 m) y NASA cuando exista.",
     )
     if summary:
         st.caption(
@@ -849,13 +819,8 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
         st.error("No hay capas GIS disponibles para el cruce.")
         return
 
-    default_ids = [
-        s["id"] for s in available if not s.get("heavy")
-    ]
-    # Incluir parroquias INE por defecto si existe
-    for prefer in ("parroquias_ine_2025", "parroquias"):
-        if any(s["id"] == prefer for s in available) and prefer not in default_ids:
-            default_ids.append(prefer)
+    # Por defecto: todas las capas disponibles, incluido segmento censal (pesada)
+    default_ids = [s["id"] for s in available]
 
     labels = {
         s["id"]: f"{s['label']}" + (" · pesada" if s.get("heavy") else "")
@@ -867,7 +832,7 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
         default=default_ids,
         format_func=lambda i: labels.get(i, i),
         key="abordaje_export_layers",
-        help="Los segmentos censales (~28 mil polígonos) pueden tardar más.",
+        help="Los segmentos censales (~28 mil polígonos) pueden tardar 1–3 minutos.",
     )
     c1, c2 = st.columns(2)
     with c1:
@@ -882,6 +847,21 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
             value=True,
             key="abordaje_export_mapok",
         )
+    c3, c4 = st.columns(2)
+    with c3:
+        incluir_ia = st.checkbox(
+            "Incluir cruce IA (Excel estructuras ≤ 50 m)",
+            value=True,
+            key="abordaje_export_ia",
+            help="Pega estatus de riesgo IA al punto 1×10 más cercano.",
+        )
+    with c4:
+        incluir_nasa = st.checkbox(
+            "Incluir NASA (cruce 1×10 ya calculado)",
+            value=True,
+            key="abordaje_export_nasa",
+            help="Une por código de caso el parquet NASA si está en disco.",
+        )
 
     if not sel:
         st.info("Seleccione al menos una capa.")
@@ -892,13 +872,21 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
         type="primary",
         key="abordaje_export_run",
     ):
-        with st.spinner("Cruzando puntos 1×10 con las capas seleccionadas…"):
+        with st.spinner(
+            "Cruzando 1×10 con capas"
+            + (", IA" if incluir_ia else "")
+            + (", NASA" if incluir_nasa else "")
+            + "…"
+        ):
             try:
                 df, meta = construir_cruce_1x10_capas(
                     sol if isinstance(sol, pd.DataFrame) else pd.DataFrame(),
                     layer_ids=list(sel),
                     solo_mapeables=solo_map,
                     solo_representantes=solo_rep,
+                    incluir_ia=incluir_ia,
+                    ia_radius_m=float((summary or {}).get("radius_m") or 50),
+                    incluir_nasa=incluir_nasa,
                 )
             except Exception as exc:  # noqa: BLE001
                 st.error(f"No se pudo generar el cruce: {exc}")
@@ -931,6 +919,34 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
         ]
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
+    ia_m = meta.get("ia") or {}
+    nasa_m = meta.get("nasa_1x10") or {}
+    if ia_m.get("ia_disponible") or nasa_m.get("nasa_1x10_disponible"):
+        extras = []
+        if ia_m.get("ia_disponible"):
+            extras.append(
+                {
+                    "Fuente": "IA",
+                    "Con match": ia_m.get("ia_n_con_match"),
+                    "Alertas": ia_m.get("ia_n_alerta"),
+                    "% match": ia_m.get("ia_pct_match"),
+                }
+            )
+        if nasa_m.get("nasa_1x10_disponible"):
+            extras.append(
+                {
+                    "Fuente": "NASA 1×10",
+                    "Con match": nasa_m.get("nasa_1x10_n_con_label"),
+                    "Alertas": "—",
+                    "% match": "—",
+                }
+            )
+        st.dataframe(pd.DataFrame(extras), hide_index=True, width="stretch")
+    elif incluir_ia or incluir_nasa:
+        st.caption(
+            "IA/NASA: sin datos en disco (revise parquet en data/external_nasa/)."
+        )
+
     st.dataframe(df.head(200), hide_index=True, width="stretch", height=360)
     st.caption("Vista previa (200 filas). El archivo completo va en la descarga.")
 
@@ -944,24 +960,47 @@ def _render_abordaje_descarga(sol=None, summary: dict | None = None) -> None:
                     "n_puntos": meta.get("n_puntos"),
                     "capas": list((meta.get("capas") or {}).keys()),
                     "faltantes": meta.get("capas_faltantes"),
+                    "ia": meta.get("ia"),
+                    "nasa_1x10": meta.get("nasa_1x10"),
                 }.items()
             ]
         ).to_excel(writer, sheet_name="meta", index=False)
-    st.download_button(
-        "Descargar Excel del cruce territorial",
-        data=buf.getvalue(),
-        file_name="cruce_1x10_capas_abordaje.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary",
-        key="abordaje_export_dl_xlsx",
-    )
-    st.download_button(
-        "Descargar CSV",
-        data=df.to_csv(index=False).encode("utf-8-sig"),
-        file_name="cruce_1x10_capas_abordaje.csv",
-        mime="text/csv",
-        key="abordaje_export_dl_csv",
-    )
+    try:
+        import audit_ui
+
+        audit_ui.download_button(
+            "Descargar Excel maestro 1×10",
+            data=buf.getvalue(),
+            file_name="cruce_1x10_maestro_abordaje.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key="abordaje_export_dl_xlsx",
+            audit_action="download_maestro_1x10",
+        )
+        audit_ui.download_button(
+            "Descargar CSV",
+            data=df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="cruce_1x10_maestro_abordaje.csv",
+            mime="text/csv",
+            key="abordaje_export_dl_csv",
+            audit_action="download_maestro_1x10",
+        )
+    except Exception:
+        st.download_button(
+            "Descargar Excel maestro 1×10",
+            data=buf.getvalue(),
+            file_name="cruce_1x10_maestro_abordaje.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key="abordaje_export_dl_xlsx",
+        )
+        st.download_button(
+            "Descargar CSV",
+            data=df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="cruce_1x10_maestro_abordaje.csv",
+            mime="text/csv",
+            key="abordaje_export_dl_csv",
+        )
 
 
 def _render_abordaje_mapa(
@@ -1019,14 +1058,21 @@ def _render_abordaje_mapa(
     )
 
     # Controles rápidos (no fuerzan rebuild de ~40k puntos hasta «Aplicar»)
+    from map_tiles import available_basemaps, default_basemap_key, tile_policy_caption
+
     c1, c2 = st.columns([1.2, 1.2])
     with c1:
+        bm = available_basemaps(lite=True)
+        keys = list(bm.keys())
+        default_k = default_basemap_key(bm)
         basemap_ui = st.selectbox(
             "Mapa base",
-            options=list(BASEMAPS.keys()),
-            index=0,
+            options=keys,
+            index=keys.index(default_k) if default_k in keys else 0,
             key="abordaje_basemap",
+            help="En producción: BI_TILES_URL (sin OSM/Esri).",
         )
+        st.caption(tile_policy_caption())
     with c2:
         view_ui = st.selectbox(
             "Vista inicial",
